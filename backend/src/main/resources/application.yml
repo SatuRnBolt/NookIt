@@ -1,0 +1,92 @@
+spring:
+  application:
+    name: nookit-backend
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  compression:
+    enabled: true
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# MyBatis-Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.nookit.modules.**.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: ASSIGN_ID
+      # 逻辑删除采用 deleted_at 字段，由 BaseEntity 上的 @TableLogic 控制
+      # （使用 datetime 形式时，per-field 注解比 YAML 全局配置更稳）
+
+# SpringDoc / Swagger UI
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  default-produces-media-type: application/json
+
+# Nookit business config
+nookit:
+  jwt:
+    # 至少 32 字节，建议生产环境通过环境变量注入
+    secret: ${NOOKIT_JWT_SECRET:please-change-me-please-change-me-please}
+    issuer: nookit
+    expire-minutes: 1440        # 24 小时
+    refresh-expire-minutes: 10080 # 7 天
+    header: Authorization
+    token-prefix: "Bearer "
+  cors:
+    allowed-origins:
+      - "*"
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - PATCH
+      - OPTIONS
+    allowed-headers:
+      - "*"
+    allow-credentials: true
+    max-age: 3600
+  security:
+    # 不需要认证的路径白名单
+    permit-all:
+      - /auth/login
+      - /auth/register
+      - /auth/refresh
+      - /ping
+      - /v3/api-docs/**
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /doc.html
+      - /webjars/**
+  reservation:
+    max-hours-per-booking: 4
+    checkin-warning-minutes: 10
+    checkin-deadline-minutes: 15
+    remind-before-minutes: 15
