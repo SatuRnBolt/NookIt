@@ -1,43 +1,25 @@
 package com.nookit.common.domain;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
-import java.io.Serial;
-import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 数据库实体基类。所有需要审计字段的表实体都应继承本类。
+ * 数据库实体基类。
  * <p>
- * Long 类型主键序列化为 String，避免前端 JS 精度丢失。
+ * 含 {@code id} + {@code created_at} + {@code updated_at} + {@code deleted_at}（逻辑删除）。
+ * 适用于需要软删除的核心业务表。
  */
 @Data
-public abstract class BaseEntity implements Serializable {
-
-    @Serial
-    private static final long serialVersionUID = 1L;
-
-    @TableId(type = IdType.ASSIGN_ID)
-    @JsonSerialize(using = ToStringSerializer.class)
-    private Long id;
-
-    @TableField(value = "created_at", fill = FieldFill.INSERT)
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
-    private LocalDateTime createdAt;
-
-    @TableField(value = "updated_at", fill = FieldFill.INSERT_UPDATE)
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
-    private LocalDateTime updatedAt;
+@EqualsAndHashCode(callSuper = true)
+public abstract class BaseEntity extends BaseTimestampEntity {
 
     @TableLogic(value = "null", delval = "NOW()")
     @TableField(value = "deleted_at", select = false)
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime deletedAt;
 }

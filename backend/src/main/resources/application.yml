@@ -25,7 +25,7 @@ server:
 # MyBatis-Plus
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
-  type-aliases-package: com.nookit.modules.**.domain
+  type-aliases-package: com.nookit.**.domain
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
