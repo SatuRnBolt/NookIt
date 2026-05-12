@@ -881,7 +881,54 @@ CREATE TABLE dictionary_items (
 ) ENGINE=InnoDB;
 
 -- =========================================================
--- 7. Seed data
+-- 7. Notice and feedback domain
+-- =========================================================
+
+CREATE TABLE admin_notices (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  title VARCHAR(120) NOT NULL,
+  content TEXT NOT NULL,
+  notice_type ENUM('system', 'rule', 'event', 'maintenance') NOT NULL DEFAULT 'system',
+  notice_status ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
+  is_pinned TINYINT(1) NOT NULL DEFAULT 0,
+  author_name VARCHAR(64) NULL,
+  published_at DATETIME NULL,
+  created_by BIGINT UNSIGNED NULL,
+  updated_by BIGINT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_admin_notices_status_type (notice_status, notice_type),
+  KEY idx_admin_notices_pinned_published (is_pinned, published_at),
+  CONSTRAINT fk_admin_notices_created_by FOREIGN KEY (created_by) REFERENCES users (id),
+  CONSTRAINT fk_admin_notices_updated_by FOREIGN KEY (updated_by) REFERENCES users (id)
+) ENGINE=InnoDB;
+
+CREATE TABLE user_feedbacks (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  student_name VARCHAR(64) NOT NULL,
+  student_no VARCHAR(32) NOT NULL,
+  feedback_type ENUM('bug', 'suggestion', 'complaint') NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  content TEXT NOT NULL,
+  feedback_status ENUM('pending', 'processing', 'resolved') NOT NULL DEFAULT 'pending',
+  reply_content TEXT NULL,
+  replied_by BIGINT UNSIGNED NULL,
+  replied_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_user_feedbacks_user_status (user_id, feedback_status),
+  KEY idx_user_feedbacks_status_type (feedback_status, feedback_type),
+  CONSTRAINT fk_user_feedbacks_user FOREIGN KEY (user_id) REFERENCES users (id),
+  CONSTRAINT fk_user_feedbacks_replied_by FOREIGN KEY (replied_by) REFERENCES users (id)
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- 8. Seed data
 -- =========================================================
 
 INSERT INTO campuses (campus_code, campus_name, address)
@@ -1400,6 +1447,104 @@ VALUES
   ('assistant-llm-enabled', '启用大语言模型增强回复', 0, JSON_OBJECT('provider', 'anthropic', 'fallback', 'rules'), (SELECT id FROM users WHERE email = 'admin@study.edu.cn')),
   ('violation-appeal-enabled', '启用学生违约申诉流程', 1, JSON_OBJECT('review_sla_hours', 48), (SELECT id FROM users WHERE email = 'admin@study.edu.cn')),
   ('special-room-policy-enabled', '启用特殊房型差异化预约策略', 1, JSON_OBJECT('supported_types', JSON_ARRAY('QUIET_POD', 'DISCUSSION_ROOM')), (SELECT id FROM users WHERE email = 'admin@study.edu.cn'));
+
+INSERT INTO admin_notices (title, content, notice_type, notice_status, is_pinned, author_name, published_at, created_by)
+VALUES
+  (
+    '图书馆自习室暑期开放时间调整通知',
+    '为保障同学们暑期学习，图书馆自习室开放时间调整为每日 08:00-22:00，请同学们合理安排时间，按时预约入座。如有疑问请联系图书馆管理处。',
+    'system',
+    'published',
+    1,
+    '系统管理员',
+    '2026-04-01 10:00:00',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    '关于违约处理规则更新的说明',
+    '自2026年4月15日起，累计违约3次的用户将被暂停预约权限7天。请各位同学遵守预约规则，按时签到或提前取消预约。',
+    'rule',
+    'published',
+    1,
+    '系统管理员',
+    '2026-04-05 09:00:00',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    '五一假期自习室开放安排',
+    '五一假期（5月1日至5月5日）期间，各校区自习室正常开放，开放时间为 08:00-21:00。假期结束后恢复正常时间。',
+    'event',
+    'published',
+    0,
+    '计算机学院管理员',
+    '2026-04-20 11:00:00',
+    (SELECT id FROM users WHERE email = 'cs_admin@study.edu.cn')
+  ),
+  (
+    '枫林校区医学院自习室开放公告',
+    '枫林校区医学院专用自习室（ZH-MED-301）已完成装修，即将向医学院同学开放预约，请关注后续通知。',
+    'system',
+    'draft',
+    0,
+    '计算机学院管理员',
+    NULL,
+    (SELECT id FROM users WHERE email = 'cs_admin@study.edu.cn')
+  ),
+  (
+    '系统维护通知：4月30日凌晨停服1小时',
+    '为保障系统稳定运行，将于2026年4月30日凌晨02:00-03:00进行例行系统维护，期间预约功能暂停使用，请提前做好预约安排。',
+    'maintenance',
+    'published',
+    0,
+    '系统管理员',
+    '2026-04-28 14:00:00',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  );
+
+INSERT INTO user_feedbacks (user_id, student_name, student_no, feedback_type, title, content, feedback_status, reply_content, replied_by, replied_at)
+VALUES
+  (
+    (SELECT id FROM users WHERE student_no = '20230001'),
+    '张三',
+    '20230001',
+    'bug',
+    '签到页面无法正常显示二维码',
+    '在签到时点击"扫码签到"按钮后，页面空白，无法显示二维码。使用的是 iOS 微信内置浏览器，已尝试重启无效。',
+    'resolved',
+    '感谢反馈！该问题已在最新版本中修复，微信浏览器签到功能已恢复正常，请更新后重试。',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn'),
+    '2026-04-07 10:00:00'
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230001'),
+    '张三',
+    '20230001',
+    'suggestion',
+    '建议增加"常用座位"收藏功能',
+    '每次预约都要重新查找座位比较麻烦，建议增加收藏常用座位的功能，下次可以快速预约。',
+    'pending',
+    NULL,
+    NULL,
+    NULL
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230001'),
+    '张三',
+    '20230001',
+    'complaint',
+    '图书馆B区座位标注有误',
+    '图书馆B区B12座位在系统里显示有插座，但实际去了发现没有，影响了我的学习计划，希望尽快核实修正。',
+    'processing',
+    NULL,
+    NULL,
+    NULL
+  );
+
+INSERT INTO system_settings (setting_key, setting_group_name, value_type, value_text, description_text, is_public, updated_by)
+VALUES
+  ('violation.max_count', 'violation', 'int', '3', '触发自动封号的违约次数阈值', 1, (SELECT id FROM users WHERE email = 'admin@study.edu.cn')),
+  ('violation.suspend_days', 'violation', 'int', '7', '违规封号持续天数', 1, (SELECT id FROM users WHERE email = 'admin@study.edu.cn')),
+  ('reservation.allow_weekend', 'reservation', 'bool', 'true', '是否允许周末预约', 1, (SELECT id FROM users WHERE email = 'admin@study.edu.cn'));
 
 INSERT INTO dictionary_items (dict_type, dict_key, dict_value, sort_order)
 VALUES
