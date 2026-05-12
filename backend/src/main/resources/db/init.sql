@@ -1009,7 +1009,7 @@ INSERT INTO auth_identities (
     'email_password',
     'admin@study.edu.cn',
     'local',
-    'REPLACE_WITH_BCRYPT_HASH_FOR_admin123',
+    '$2b$12$ZTncLC/HXhjUhSPJOrAv/eDu9Xt3fR9Caa5XA/zoPitFaX/9MWa7q',
     1,
     CURRENT_TIMESTAMP
   ),
@@ -1018,7 +1018,7 @@ INSERT INTO auth_identities (
     'email_password',
     'cs_admin@study.edu.cn',
     'local',
-    'REPLACE_WITH_BCRYPT_HASH_FOR_admin123',
+    '$2b$12$ZTncLC/HXhjUhSPJOrAv/eDu9Xt3fR9Caa5XA/zoPitFaX/9MWa7q',
     1,
     CURRENT_TIMESTAMP
   ),
@@ -1027,7 +1027,7 @@ INSERT INTO auth_identities (
     'student_no_password',
     '20230001',
     'local',
-    'REPLACE_WITH_BCRYPT_HASH_FOR_student123',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
     1,
     CURRENT_TIMESTAMP
   ),
@@ -1036,7 +1036,7 @@ INSERT INTO auth_identities (
     'email_password',
     '20230001@study.edu.cn',
     'local',
-    'REPLACE_WITH_BCRYPT_HASH_FOR_student123',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
     1,
     CURRENT_TIMESTAMP
   );
