@@ -934,12 +934,18 @@ CREATE TABLE user_feedbacks (
 INSERT INTO campuses (campus_code, campus_name, address)
 VALUES ('MAIN', '示例大学主校区', '中国示例省示例市大学路 1 号');
 
+SET @main_campus_id := (SELECT id FROM campuses WHERE campus_code = 'MAIN');
+
+INSERT INTO organizations (campus_id, parent_id, org_code, org_name, org_type, org_path, display_order)
+VALUES (@main_campus_id, NULL, 'SCHOOL', '示例大学', 'school', '/SCHOOL/', 1);
+
+SET @school_org_id := (SELECT id FROM organizations WHERE org_code = 'SCHOOL');
+
 INSERT INTO organizations (campus_id, parent_id, org_code, org_name, org_type, org_path, display_order)
 VALUES
-  ((SELECT id FROM campuses WHERE campus_code = 'MAIN'), NULL, 'SCHOOL', '示例大学', 'school', '/SCHOOL/', 1),
-  ((SELECT id FROM campuses WHERE campus_code = 'MAIN'), (SELECT id FROM organizations WHERE org_code = 'SCHOOL'), 'LIB', '图书馆', 'library', '/SCHOOL/LIB/', 10),
-  ((SELECT id FROM campuses WHERE campus_code = 'MAIN'), (SELECT id FROM organizations WHERE org_code = 'SCHOOL'), 'CS', '计算机学院', 'college', '/SCHOOL/CS/', 20),
-  ((SELECT id FROM campuses WHERE campus_code = 'MAIN'), (SELECT id FROM organizations WHERE org_code = 'SCHOOL'), 'MATH', '数学学院', 'college', '/SCHOOL/MATH/', 30);
+  (@main_campus_id, @school_org_id, 'LIB', '图书馆', 'library', '/SCHOOL/LIB/', 10),
+  (@main_campus_id, @school_org_id, 'CS', '计算机学院', 'college', '/SCHOOL/CS/', 20),
+  (@main_campus_id, @school_org_id, 'MATH', '数学学院', 'college', '/SCHOOL/MATH/', 30);
 
 INSERT INTO users (
   user_type,
