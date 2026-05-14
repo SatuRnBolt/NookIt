@@ -1566,3 +1566,1417 @@ VALUES
   ('violation_type', 'late_cancel', '临时取消', 2),
   ('room_type', 'QUIET_POD', '静音仓', 10),
   ('room_type', 'DISCUSSION_ROOM', '讨论间', 20);
+
+-- =========================================================
+-- 9. Extended demo mock data
+-- =========================================================
+
+INSERT INTO users (
+  user_type,
+  account_status,
+  student_no,
+  employee_no,
+  full_name,
+  nickname,
+  email,
+  phone,
+  primary_organization_id,
+  must_change_password,
+  violation_count,
+  remark
+) VALUES
+  (
+    'staff',
+    'active',
+    NULL,
+    'A0003',
+    '运营审核员',
+    'Ops Admin',
+    'ops_admin@study.edu.cn',
+    '13800000002',
+    (SELECT id FROM organizations WHERE org_code = 'LIB'),
+    1,
+    0,
+    '负责违约审核、通知投递和演示数据运营操作。'
+  ),
+  (
+    'student',
+    'active',
+    '20230002',
+    NULL,
+    '李思',
+    'Li Si',
+    '20230002@study.edu.cn',
+    '13900000002',
+    (SELECT id FROM organizations WHERE org_code = 'CS'),
+    0,
+    0,
+    '计算机学院学生，主要覆盖公开自习室预约与完成场景。'
+  ),
+  (
+    'student',
+    'active',
+    '20230003',
+    NULL,
+    '王五',
+    'Wang Wu',
+    '20230003@study.edu.cn',
+    '13900000003',
+    (SELECT id FROM organizations WHERE org_code = 'MATH'),
+    0,
+    1,
+    '数学学院学生，覆盖完成和未签到违约场景。'
+  ),
+  (
+    'student',
+    'active',
+    '20230004',
+    NULL,
+    '赵六',
+    'Zhao Liu',
+    '20230004@study.edu.cn',
+    '13900000004',
+    (SELECT id FROM organizations WHERE org_code = 'CS'),
+    0,
+    0,
+    '计算机学院学生，覆盖静音仓签到与取消场景。'
+  ),
+  (
+    'student',
+    'active',
+    '20230005',
+    NULL,
+    '孙琪',
+    'Sun Qi',
+    '20230005@study.edu.cn',
+    '13900000005',
+    (SELECT id FROM organizations WHERE org_code = 'MATH'),
+    0,
+    1,
+    '数学学院学生，覆盖未来预约与临时取消违约场景。'
+  ),
+  (
+    'student',
+    'active',
+    '20230006',
+    NULL,
+    '陈墨',
+    'Chen Mo',
+    '20230006@study.edu.cn',
+    '13900000006',
+    (SELECT id FROM organizations WHERE org_code = 'CS'),
+    0,
+    0,
+    '计算机学院学生，覆盖 AI 助手辅助预约与违约申诉通过场景。'
+  );
+
+INSERT INTO auth_identities (
+  user_id,
+  identity_type,
+  identity_key,
+  auth_source,
+  credential_hash,
+  is_verified,
+  verified_at
+) VALUES
+  (
+    (SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'),
+    'employee_no_password',
+    'A0003',
+    'local',
+    '$2b$12$ZTncLC/HXhjUhSPJOrAv/eDu9Xt3fR9Caa5XA/zoPitFaX/9MWa7q',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'),
+    'email_password',
+    'ops_admin@study.edu.cn',
+    'local',
+    '$2b$12$ZTncLC/HXhjUhSPJOrAv/eDu9Xt3fR9Caa5XA/zoPitFaX/9MWa7q',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230002'),
+    'student_no_password',
+    '20230002',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230002'),
+    'email_password',
+    '20230002@study.edu.cn',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230003'),
+    'student_no_password',
+    '20230003',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230003'),
+    'email_password',
+    '20230003@study.edu.cn',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230004'),
+    'student_no_password',
+    '20230004',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230004'),
+    'email_password',
+    '20230004@study.edu.cn',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230005'),
+    'student_no_password',
+    '20230005',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230005'),
+    'email_password',
+    '20230005@study.edu.cn',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230006'),
+    'student_no_password',
+    '20230006',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  ),
+  (
+    (SELECT id FROM users WHERE student_no = '20230006'),
+    'email_password',
+    '20230006@study.edu.cn',
+    'local',
+    '$2b$12$6kNv8z4pJv8UHOiFJa0vY.j8/Q5yQzuIY.aNZ3/scGQNWg8MYpLZS',
+    1,
+    CURRENT_TIMESTAMP
+  );
+
+INSERT INTO user_contact_methods (user_id, contact_type, contact_value, is_primary, is_verified, verified_at)
+VALUES
+  ((SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'), 'email', 'ops_admin@study.edu.cn', 1, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'), 'in_app', 'user:ops_admin', 0, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230002'), 'email', '20230002@study.edu.cn', 1, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230002'), 'in_app', 'user:20230002', 0, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230003'), 'email', '20230003@study.edu.cn', 1, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230003'), 'in_app', 'user:20230003', 0, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230004'), 'email', '20230004@study.edu.cn', 1, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230004'), 'in_app', 'user:20230004', 0, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230005'), 'email', '20230005@study.edu.cn', 1, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230005'), 'in_app', 'user:20230005', 0, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230006'), 'email', '20230006@study.edu.cn', 1, 1, CURRENT_TIMESTAMP),
+  ((SELECT id FROM users WHERE student_no = '20230006'), 'in_app', 'user:20230006', 0, 1, CURRENT_TIMESTAMP);
+
+INSERT INTO user_notification_preferences (user_id, channel, event_type, is_enabled)
+VALUES
+  ((SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'), 'email', 'system_alert', 1),
+  ((SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'), 'email', 'violation_review', 1),
+  ((SELECT id FROM users WHERE student_no = '20230002'), 'email', 'reservation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230002'), 'email', 'reservation_reminder', 1),
+  ((SELECT id FROM users WHERE student_no = '20230002'), 'in_app', 'violation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230003'), 'email', 'reservation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230003'), 'email', 'checkin_warning', 1),
+  ((SELECT id FROM users WHERE student_no = '20230003'), 'in_app', 'violation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230004'), 'email', 'reservation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230004'), 'email', 'reservation_reminder', 1),
+  ((SELECT id FROM users WHERE student_no = '20230005'), 'email', 'reservation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230005'), 'email', 'appeal_result', 1),
+  ((SELECT id FROM users WHERE student_no = '20230006'), 'email', 'reservation_created', 1),
+  ((SELECT id FROM users WHERE student_no = '20230006'), 'email', 'appeal_result', 1),
+  ((SELECT id FROM users WHERE student_no = '20230006'), 'in_app', 'violation_created', 1);
+
+INSERT INTO user_roles (user_id, role_id, scope_type, campus_id, organization_id, is_primary, assigned_by)
+VALUES
+  (
+    (SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn'),
+    (SELECT id FROM roles WHERE role_code = 'OPERATIONS_ADMIN'),
+    'campus',
+    (SELECT id FROM campuses WHERE campus_code = 'MAIN'),
+    NULL,
+    1,
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  );
+
+INSERT INTO room_checkin_codes (study_room_id, code_date, code_value, qr_payload, valid_from, valid_to, code_status, created_by)
+VALUES
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'LIB-301'),
+    DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY),
+    'LBM301',
+    'room:LIB-301|date:-3|code:LBM301',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '00:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '00:00:00'),
+    'expired',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'LIB-301'),
+    DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY),
+    'LBM201',
+    'room:LIB-301|date:-2|code:LBM201',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '00:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '00:00:00'),
+    'expired',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'LIB-301'),
+    DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+    'LBM101',
+    'room:LIB-301|date:-1|code:LBM101',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '00:00:00'),
+    TIMESTAMP(CURRENT_DATE, '00:00:00'),
+    'expired',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'LIB-301'),
+    DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY),
+    'LBP101',
+    'room:LIB-301|date:+1|code:LBP101',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '00:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '00:00:00'),
+    'active',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'LIB-301'),
+    DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY),
+    'LBP201',
+    'room:LIB-301|date:+2|code:LBP201',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '00:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 3 DAY), '00:00:00'),
+    'active',
+    (SELECT id FROM users WHERE email = 'admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'CS-201'),
+    DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+    'CSM101',
+    'room:CS-201|date:-1|code:CSM101',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '00:00:00'),
+    TIMESTAMP(CURRENT_DATE, '00:00:00'),
+    'expired',
+    (SELECT id FROM users WHERE email = 'cs_admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'CS-201'),
+    DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY),
+    'CSP101',
+    'room:CS-201|date:+1|code:CSP101',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '00:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '00:00:00'),
+    'active',
+    (SELECT id FROM users WHERE email = 'cs_admin@study.edu.cn')
+  ),
+  (
+    (SELECT id FROM study_rooms WHERE room_code = 'CS-201'),
+    DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY),
+    'CSP201',
+    'room:CS-201|date:+2|code:CSP201',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '00:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 3 DAY), '00:00:00'),
+    'active',
+    (SELECT id FROM users WHERE email = 'cs_admin@study.edu.cn')
+  );
+
+SET @admin_user_id := (SELECT id FROM users WHERE email = 'admin@study.edu.cn');
+SET @cs_admin_user_id := (SELECT id FROM users WHERE email = 'cs_admin@study.edu.cn');
+SET @ops_admin_user_id := (SELECT id FROM users WHERE email = 'ops_admin@study.edu.cn');
+SET @zhang_san_user_id := (SELECT id FROM users WHERE student_no = '20230001');
+SET @li_si_user_id := (SELECT id FROM users WHERE student_no = '20230002');
+SET @wang_wu_user_id := (SELECT id FROM users WHERE student_no = '20230003');
+SET @zhao_liu_user_id := (SELECT id FROM users WHERE student_no = '20230004');
+SET @sun_qi_user_id := (SELECT id FROM users WHERE student_no = '20230005');
+SET @chen_mo_user_id := (SELECT id FROM users WHERE student_no = '20230006');
+
+SET @lib_room_id := (SELECT id FROM study_rooms WHERE room_code = 'LIB-301');
+SET @cs_room_id := (SELECT id FROM study_rooms WHERE room_code = 'CS-201');
+SET @seat_lib_a01_id := (SELECT id FROM seats WHERE study_room_id = @lib_room_id AND seat_code = 'A01');
+SET @seat_lib_a02_id := (SELECT id FROM seats WHERE study_room_id = @lib_room_id AND seat_code = 'A02');
+SET @seat_lib_b01_id := (SELECT id FROM seats WHERE study_room_id = @lib_room_id AND seat_code = 'B01');
+SET @seat_lib_b02_id := (SELECT id FROM seats WHERE study_room_id = @lib_room_id AND seat_code = 'B02');
+SET @seat_lib_c01_id := (SELECT id FROM seats WHERE study_room_id = @lib_room_id AND seat_code = 'C01');
+SET @seat_lib_c02_id := (SELECT id FROM seats WHERE study_room_id = @lib_room_id AND seat_code = 'C02');
+SET @seat_cs_q01_id := (SELECT id FROM seats WHERE study_room_id = @cs_room_id AND seat_code = 'Q01');
+SET @seat_cs_q02_id := (SELECT id FROM seats WHERE study_room_id = @cs_room_id AND seat_code = 'Q02');
+SET @seat_cs_q03_id := (SELECT id FROM seats WHERE study_room_id = @cs_room_id AND seat_code = 'Q03');
+SET @seat_cs_q04_id := (SELECT id FROM seats WHERE study_room_id = @cs_room_id AND seat_code = 'Q04');
+
+SET @lib_code_minus3_id := (SELECT id FROM room_checkin_codes WHERE study_room_id = @lib_room_id AND code_date = DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY));
+SET @lib_code_minus1_id := (SELECT id FROM room_checkin_codes WHERE study_room_id = @lib_room_id AND code_date = DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY));
+SET @cs_code_today_id := (SELECT id FROM room_checkin_codes WHERE study_room_id = @cs_room_id AND code_date = CURRENT_DATE);
+
+INSERT INTO reservations (
+  reservation_no,
+  user_id,
+  created_by_user_id,
+  study_room_id,
+  seat_id,
+  reservation_date,
+  start_at,
+  end_at,
+  start_hour,
+  end_hour,
+  duration_hours,
+  reservation_status,
+  source_channel,
+  cancel_reason_type,
+  cancel_reason_note,
+  reminder_at,
+  warning_at,
+  checkin_deadline_at,
+  checked_in_at,
+  completed_at,
+  cancelled_at,
+  repeated_from_reservation_id,
+  policy_snapshot_json,
+  notes_text
+) VALUES
+  (
+    'RSV-DMO-001',
+    @zhang_san_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_a01_id,
+    DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '09:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '11:00:00'),
+    9,
+    11,
+    2,
+    'completed',
+    'web',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '08:45:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '09:10:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '09:15:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '08:58:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '11:05:00'),
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'entry', 'self_service'),
+    '示例学生完成图书馆公开座位预约。'
+  ),
+  (
+    'RSV-DMO-002',
+    @li_si_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_a02_id,
+    DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '14:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '17:00:00'),
+    14,
+    17,
+    3,
+    'completed',
+    'mini_program',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '13:45:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '14:10:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '14:15:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '13:57:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '17:05:00'),
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'entry', 'mini_program'),
+    '公开自习区长时段预约完成案例。'
+  ),
+  (
+    'RSV-DMO-003',
+    @zhao_liu_user_id,
+    NULL,
+    @cs_room_id,
+    @seat_cs_q01_id,
+    CURRENT_DATE,
+    TIMESTAMP(CURRENT_DATE, '09:00:00'),
+    TIMESTAMP(CURRENT_DATE, '11:00:00'),
+    9,
+    11,
+    2,
+    'checked_in',
+    'mini_program',
+    NULL,
+    NULL,
+    TIMESTAMP(CURRENT_DATE, '08:45:00'),
+    TIMESTAMP(CURRENT_DATE, '09:10:00'),
+    TIMESTAMP(CURRENT_DATE, '09:15:00'),
+    TIMESTAMP(CURRENT_DATE, '08:59:00'),
+    NULL,
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 2, 'visibility_scope', 'organization', 'quiet_required', true),
+    '静音仓今日已签到但尚未结束的活跃预约。'
+  ),
+  (
+    'RSV-DMO-004',
+    @sun_qi_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_b01_id,
+    DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '10:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '12:00:00'),
+    10,
+    12,
+    2,
+    'pending_checkin',
+    'web',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '09:45:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '10:10:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '10:15:00'),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'requested_feature', 'window_side'),
+    '未来待签到预约，用于展示提醒和待办列表。'
+  ),
+  (
+    'RSV-DMO-005',
+    @chen_mo_user_id,
+    NULL,
+    @cs_room_id,
+    @seat_cs_q02_id,
+    DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '14:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '16:00:00'),
+    14,
+    16,
+    2,
+    'pending_checkin',
+    'assistant',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '13:45:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '14:10:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '14:15:00'),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 2, 'visibility_scope', 'organization', 'requested_feature', 'quiet_level', 'assistant_generated', true),
+    'AI 助手推荐并代为创建的静音仓预约。'
+  ),
+  (
+    'RSV-DMO-006',
+    @wang_wu_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_b02_id,
+    CURRENT_DATE,
+    TIMESTAMP(CURRENT_DATE, '08:00:00'),
+    TIMESTAMP(CURRENT_DATE, '10:00:00'),
+    8,
+    10,
+    2,
+    'violated',
+    'web',
+    NULL,
+    NULL,
+    TIMESTAMP(CURRENT_DATE, '07:45:00'),
+    TIMESTAMP(CURRENT_DATE, '08:10:00'),
+    TIMESTAMP(CURRENT_DATE, '08:15:00'),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'violation_expected', true),
+    '用于展示今日未签到违约记录。'
+  ),
+  (
+    'RSV-DMO-007',
+    @zhao_liu_user_id,
+    NULL,
+    @cs_room_id,
+    @seat_cs_q03_id,
+    DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '15:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '17:00:00'),
+    15,
+    17,
+    2,
+    'cancelled',
+    'mini_program',
+    'plans_changed',
+    '实验课临时调课，提前半天取消预约。',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '14:45:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '15:10:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '15:15:00'),
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '12:30:00'),
+    NULL,
+    JSON_OBJECT('max_hours', 2, 'visibility_scope', 'organization', 'cancellation_type', 'early'),
+    '正常提前取消案例，不产生违约。'
+  ),
+  (
+    'RSV-DMO-008',
+    @zhang_san_user_id,
+    @ops_admin_user_id,
+    @cs_room_id,
+    @seat_cs_q04_id,
+    DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '09:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '11:00:00'),
+    9,
+    11,
+    2,
+    'pending_checkin',
+    'admin',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '08:45:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '09:10:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '09:15:00'),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 2, 'visibility_scope', 'organization', 'booking_mode', 'proxy_admin'),
+    '管理员代学生预约，用于后台运营场景。'
+  ),
+  (
+    'RSV-DMO-009',
+    @chen_mo_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_c01_id,
+    DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '20:00:00'),
+    18,
+    20,
+    2,
+    'violated',
+    'assistant',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '17:45:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:10:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:15:00'),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'assistant_generated', true),
+    'AI 助手创建后未签到，后续用于申诉通过与撤销违约。'
+  ),
+  (
+    'RSV-DMO-010',
+    @wang_wu_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_c02_id,
+    DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '13:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '15:00:00'),
+    13,
+    15,
+    2,
+    'completed',
+    'web',
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:45:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '13:10:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '13:15:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:55:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '15:03:00'),
+    NULL,
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'preferred_zone', 'accessible'),
+    '更早的历史完成预约，用于趋势图和历史列表。'
+  ),
+  (
+    'RSV-DMO-011',
+    @sun_qi_user_id,
+    NULL,
+    @lib_room_id,
+    @seat_lib_a01_id,
+    DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '19:00:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '21:00:00'),
+    19,
+    21,
+    2,
+    'cancelled',
+    'mini_program',
+    'late_personal',
+    '距离开始不足三十分钟取消，触发临时取消违约。',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:45:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '19:10:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '19:15:00'),
+    NULL,
+    NULL,
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00'),
+    NULL,
+    JSON_OBJECT('max_hours', 4, 'visibility_scope', 'public', 'cancellation_type', 'late'),
+    '临时取消违约案例。'
+  );
+
+SET @res_demo_001_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-001');
+SET @res_demo_002_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-002');
+SET @res_demo_003_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-003');
+SET @res_demo_004_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-004');
+SET @res_demo_005_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-005');
+SET @res_demo_006_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-006');
+SET @res_demo_007_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-007');
+SET @res_demo_008_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-008');
+SET @res_demo_009_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-009');
+SET @res_demo_010_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-010');
+SET @res_demo_011_id := (SELECT id FROM reservations WHERE reservation_no = 'RSV-DMO-011');
+
+INSERT INTO reservation_status_logs (reservation_id, from_status, to_status, change_source, changed_by_user_id, change_note, created_at)
+VALUES
+  (@res_demo_001_id, NULL, 'pending_checkin', 'user', @zhang_san_user_id, '学生创建预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '20:30:00')),
+  (@res_demo_001_id, 'pending_checkin', 'checked_in', 'user', @zhang_san_user_id, '扫码签到成功。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '08:58:00')),
+  (@res_demo_001_id, 'checked_in', 'completed', 'system', NULL, '预约到期后自动完成。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '11:05:00')),
+  (@res_demo_002_id, NULL, 'pending_checkin', 'user', @li_si_user_id, '小程序创建预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:10:00')),
+  (@res_demo_002_id, 'pending_checkin', 'checked_in', 'user', @li_si_user_id, '签到成功。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '13:57:00')),
+  (@res_demo_002_id, 'checked_in', 'completed', 'system', NULL, '预约结束，状态归档。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '17:05:00')),
+  (@res_demo_003_id, NULL, 'pending_checkin', 'user', @zhao_liu_user_id, '学生创建静音仓预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '21:00:00')),
+  (@res_demo_003_id, 'pending_checkin', 'checked_in', 'user', @zhao_liu_user_id, '输入签到码成功。', TIMESTAMP(CURRENT_DATE, '08:59:00')),
+  (@res_demo_004_id, NULL, 'pending_checkin', 'user', @sun_qi_user_id, '创建明日预约。', TIMESTAMP(CURRENT_DATE, '10:20:00')),
+  (@res_demo_005_id, NULL, 'pending_checkin', 'assistant', @chen_mo_user_id, 'AI 助手完成预约创建。', TIMESTAMP(CURRENT_DATE, '14:05:00')),
+  (@res_demo_006_id, NULL, 'pending_checkin', 'user', @wang_wu_user_id, '创建今日上午预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '17:30:00')),
+  (@res_demo_006_id, 'pending_checkin', 'violated', 'system', NULL, '超过签到截止时间，系统记为违约。', TIMESTAMP(CURRENT_DATE, '08:16:00')),
+  (@res_demo_007_id, NULL, 'pending_checkin', 'user', @zhao_liu_user_id, '预约明日下午静音仓。', TIMESTAMP(CURRENT_DATE, '09:10:00')),
+  (@res_demo_007_id, 'pending_checkin', 'cancelled', 'user', @zhao_liu_user_id, '提前取消，无违约。', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '12:30:00')),
+  (@res_demo_008_id, NULL, 'pending_checkin', 'admin', @ops_admin_user_id, '管理员代学生创建预约。', TIMESTAMP(CURRENT_DATE, '15:10:00')),
+  (@res_demo_009_id, NULL, 'pending_checkin', 'assistant', @chen_mo_user_id, 'AI 助手创建预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '21:15:00')),
+  (@res_demo_009_id, 'pending_checkin', 'violated', 'system', NULL, '未完成签到，系统记违约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:16:00')),
+  (@res_demo_010_id, NULL, 'pending_checkin', 'user', @wang_wu_user_id, '历史预约创建。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 4 DAY), '16:40:00')),
+  (@res_demo_010_id, 'pending_checkin', 'checked_in', 'user', @wang_wu_user_id, '历史签到成功。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:55:00')),
+  (@res_demo_010_id, 'checked_in', 'completed', 'system', NULL, '预约自然完成。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '15:03:00')),
+  (@res_demo_011_id, NULL, 'pending_checkin', 'user', @sun_qi_user_id, '创建晚间预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '20:00:00')),
+  (@res_demo_011_id, 'pending_checkin', 'cancelled', 'user', @sun_qi_user_id, '临近开始取消预约。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00'));
+
+INSERT INTO reservation_slots (reservation_id, user_id, seat_id, slot_date, hour_no, slot_status, active_token, released_at)
+VALUES
+  (@res_demo_001_id, @zhang_san_user_id, @seat_lib_a01_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 9, 'active', 1, NULL),
+  (@res_demo_001_id, @zhang_san_user_id, @seat_lib_a01_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 10, 'active', 1, NULL),
+  (@res_demo_002_id, @li_si_user_id, @seat_lib_a02_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 14, 'active', 1, NULL),
+  (@res_demo_002_id, @li_si_user_id, @seat_lib_a02_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 15, 'active', 1, NULL),
+  (@res_demo_002_id, @li_si_user_id, @seat_lib_a02_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 16, 'active', 1, NULL),
+  (@res_demo_003_id, @zhao_liu_user_id, @seat_cs_q01_id, CURRENT_DATE, 9, 'active', 1, NULL),
+  (@res_demo_003_id, @zhao_liu_user_id, @seat_cs_q01_id, CURRENT_DATE, 10, 'active', 1, NULL),
+  (@res_demo_004_id, @sun_qi_user_id, @seat_lib_b01_id, DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), 10, 'active', 1, NULL),
+  (@res_demo_004_id, @sun_qi_user_id, @seat_lib_b01_id, DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), 11, 'active', 1, NULL),
+  (@res_demo_005_id, @chen_mo_user_id, @seat_cs_q02_id, DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), 14, 'active', 1, NULL),
+  (@res_demo_005_id, @chen_mo_user_id, @seat_cs_q02_id, DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), 15, 'active', 1, NULL),
+  (@res_demo_006_id, @wang_wu_user_id, @seat_lib_b02_id, CURRENT_DATE, 8, 'active', 1, NULL),
+  (@res_demo_006_id, @wang_wu_user_id, @seat_lib_b02_id, CURRENT_DATE, 9, 'active', 1, NULL),
+  (@res_demo_007_id, @zhao_liu_user_id, @seat_cs_q03_id, DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), 15, 'released', NULL, TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '12:30:00')),
+  (@res_demo_007_id, @zhao_liu_user_id, @seat_cs_q03_id, DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), 16, 'released', NULL, TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '12:30:00')),
+  (@res_demo_008_id, @zhang_san_user_id, @seat_cs_q04_id, DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), 9, 'active', 1, NULL),
+  (@res_demo_008_id, @zhang_san_user_id, @seat_cs_q04_id, DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), 10, 'active', 1, NULL),
+  (@res_demo_009_id, @chen_mo_user_id, @seat_lib_c01_id, DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), 18, 'active', 1, NULL),
+  (@res_demo_009_id, @chen_mo_user_id, @seat_lib_c01_id, DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), 19, 'active', 1, NULL),
+  (@res_demo_010_id, @wang_wu_user_id, @seat_lib_c02_id, DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), 13, 'active', 1, NULL),
+  (@res_demo_010_id, @wang_wu_user_id, @seat_lib_c02_id, DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), 14, 'active', 1, NULL),
+  (@res_demo_011_id, @sun_qi_user_id, @seat_lib_a01_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 19, 'released', NULL, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00')),
+  (@res_demo_011_id, @sun_qi_user_id, @seat_lib_a01_id, DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), 20, 'released', NULL, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00'));
+
+INSERT INTO reservation_checkins (
+  reservation_id,
+  room_checkin_code_id,
+  checkin_method,
+  submitted_code,
+  device_identifier,
+  ip_address,
+  checkin_result,
+  result_message,
+  checked_in_at
+) VALUES
+  (@res_demo_001_id, @lib_code_minus1_id, 'qr', 'LBM101', 'wechat-ios-20230001', '10.10.1.11', 'success', '二维码签到成功。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '08:58:00')),
+  (@res_demo_002_id, @lib_code_minus1_id, 'manual_code', 'LBM101', 'web-chrome-20230002', '10.10.2.22', 'success', '手动输入签到码成功。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '13:57:00')),
+  (@res_demo_003_id, @cs_code_today_id, 'manual_code', 'CS201A', 'miniapp-android-20230004', '10.10.3.33', 'success', '静音仓签到成功。', TIMESTAMP(CURRENT_DATE, '08:59:00')),
+  (@res_demo_010_id, @lib_code_minus3_id, 'qr', 'LBM301', 'wechat-android-20230003', '10.10.4.44', 'success', '历史预约签到成功。', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:55:00'));
+
+INSERT INTO violations (
+  reservation_id,
+  user_id,
+  violation_type,
+  violation_status,
+  occurred_at,
+  points,
+  description_text,
+  revoked_at,
+  revoked_by
+) VALUES
+  (@res_demo_006_id, @wang_wu_user_id, 'no_checkin', 'active', TIMESTAMP(CURRENT_DATE, '08:16:00'), 1, '今日上午预约超时未签到。', NULL, NULL),
+  (@res_demo_009_id, @chen_mo_user_id, 'no_checkin', 'revoked', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:16:00'), 1, 'AI 助手创建预约后因课程冲突未签到。', TIMESTAMP(CURRENT_DATE, '10:00:00'), @ops_admin_user_id),
+  (@res_demo_011_id, @sun_qi_user_id, 'late_cancel', 'active', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00'), 1, '距离开始不足三十分钟取消预约。', NULL, NULL);
+
+SET @violation_demo_006_id := (SELECT id FROM violations WHERE reservation_id = @res_demo_006_id);
+SET @violation_demo_009_id := (SELECT id FROM violations WHERE reservation_id = @res_demo_009_id);
+SET @violation_demo_011_id := (SELECT id FROM violations WHERE reservation_id = @res_demo_011_id);
+
+INSERT INTO violation_appeals (
+  violation_id,
+  user_id,
+  appeal_status,
+  appeal_reason,
+  evidence_json,
+  review_note,
+  submitted_at,
+  reviewed_at,
+  reviewed_by
+) VALUES
+  (
+    @violation_demo_006_id,
+    @wang_wu_user_id,
+    'pending',
+    '当天手机欠费导致未收到签到提醒，申请人工复核。',
+    JSON_OBJECT('attachments', JSON_ARRAY('fee_bill.png'), 'statement', '现场学习结束后才发现状态异常'),
+    NULL,
+    TIMESTAMP(CURRENT_DATE, '11:00:00'),
+    NULL,
+    NULL
+  ),
+  (
+    @violation_demo_009_id,
+    @chen_mo_user_id,
+    'approved',
+    '学院临时安排答辩，已提交老师证明，希望撤销违约。',
+    JSON_OBJECT('attachments', JSON_ARRAY('defense_notice.pdf'), 'course_conflict', true),
+    '经审核属实，撤销该次违约。',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '09:00:00'),
+    TIMESTAMP(CURRENT_DATE, '10:00:00'),
+    @ops_admin_user_id
+  ),
+  (
+    @violation_demo_011_id,
+    @sun_qi_user_id,
+    'rejected',
+    '路上堵车导致无法按时到馆，希望不计入违约。',
+    JSON_OBJECT('attachments', JSON_ARRAY('subway_delay.jpg'), 'arrival_delay_minutes', 18),
+    '不属于可豁免场景，维持临时取消违约。',
+    TIMESTAMP(CURRENT_DATE, '09:30:00'),
+    TIMESTAMP(CURRENT_DATE, '15:00:00'),
+    @admin_user_id
+  );
+
+INSERT INTO violation_action_logs (violation_id, action_type, operator_user_id, action_note, created_at)
+VALUES
+  (@violation_demo_006_id, 'appeal_submitted', @wang_wu_user_id, '学生提交违约申诉，等待审核。', TIMESTAMP(CURRENT_DATE, '11:00:00')),
+  (@violation_demo_009_id, 'appeal_approved', @ops_admin_user_id, '审核通过，准备撤销违约。', TIMESTAMP(CURRENT_DATE, '10:00:00')),
+  (@violation_demo_009_id, 'violation_revoked', @ops_admin_user_id, '同步更新违约状态为 revoked。', TIMESTAMP(CURRENT_DATE, '10:02:00')),
+  (@violation_demo_011_id, 'appeal_rejected', @admin_user_id, '审核驳回，保留临时取消违约。', TIMESTAMP(CURRENT_DATE, '15:00:00'));
+
+UPDATE users SET violation_count = 1 WHERE id IN (@wang_wu_user_id, @sun_qi_user_id);
+UPDATE users SET violation_count = 0 WHERE id = @chen_mo_user_id;
+
+INSERT INTO notification_jobs (
+  user_id,
+  reservation_id,
+  violation_id,
+  template_id,
+  channel,
+  event_type,
+  job_status,
+  scheduled_at,
+  sent_at,
+  dedupe_key,
+  payload_json,
+  failure_reason
+) VALUES
+  (
+    @zhang_san_user_id,
+    @res_demo_001_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'reservation_created' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'reservation_created',
+    'sent',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '20:31:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '20:31:05'),
+    'reservation_created:RSV-DMO-001',
+    JSON_OBJECT('room_name', '图书馆三层自习区', 'seat_code', 'A01', 'start_at', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '09:00:00'), 'end_at', TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '11:00:00')),
+    NULL
+  ),
+  (
+    @sun_qi_user_id,
+    @res_demo_004_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'reservation_created' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'reservation_created',
+    'sent',
+    TIMESTAMP(CURRENT_DATE, '10:20:05'),
+    TIMESTAMP(CURRENT_DATE, '10:20:08'),
+    'reservation_created:RSV-DMO-004',
+    JSON_OBJECT('room_name', '图书馆三层自习区', 'seat_code', 'B01', 'start_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '10:00:00'), 'end_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '12:00:00')),
+    NULL
+  ),
+  (
+    @chen_mo_user_id,
+    @res_demo_005_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'reservation_created' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'reservation_created',
+    'sent',
+    TIMESTAMP(CURRENT_DATE, '14:05:05'),
+    TIMESTAMP(CURRENT_DATE, '14:05:08'),
+    'reservation_created:RSV-DMO-005',
+    JSON_OBJECT('room_name', '计算机学院静音仓', 'seat_code', 'Q02', 'start_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '14:00:00'), 'end_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '16:00:00')),
+    NULL
+  ),
+  (
+    @zhang_san_user_id,
+    @res_demo_008_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'reservation_created' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'reservation_created',
+    'sent',
+    TIMESTAMP(CURRENT_DATE, '15:10:05'),
+    TIMESTAMP(CURRENT_DATE, '15:10:08'),
+    'reservation_created:RSV-DMO-008',
+    JSON_OBJECT('room_name', '计算机学院静音仓', 'seat_code', 'Q04', 'start_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '09:00:00'), 'end_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '11:00:00'), 'created_by', 'ops_admin@study.edu.cn'),
+    NULL
+  ),
+  (
+    @sun_qi_user_id,
+    @res_demo_004_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'reservation_reminder' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'reservation_reminder',
+    'pending',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '09:45:00'),
+    NULL,
+    'reservation_reminder:RSV-DMO-004',
+    JSON_OBJECT('room_name', '图书馆三层自习区', 'seat_code', 'B01', 'start_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '10:00:00')),
+    NULL
+  ),
+  (
+    @zhang_san_user_id,
+    @res_demo_008_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'reservation_reminder' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'reservation_reminder',
+    'pending',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '08:45:00'),
+    NULL,
+    'reservation_reminder:RSV-DMO-008',
+    JSON_OBJECT('room_name', '计算机学院静音仓', 'seat_code', 'Q04', 'start_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), '09:00:00')),
+    NULL
+  ),
+  (
+    @wang_wu_user_id,
+    @res_demo_006_id,
+    NULL,
+    (SELECT id FROM notification_templates WHERE template_key = 'checkin_warning' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'checkin_warning',
+    'sent',
+    TIMESTAMP(CURRENT_DATE, '08:10:00'),
+    TIMESTAMP(CURRENT_DATE, '08:10:02'),
+    'checkin_warning:RSV-DMO-006',
+    JSON_OBJECT('room_name', '图书馆三层自习区', 'deadline_at', TIMESTAMP(CURRENT_DATE, '08:15:00')),
+    NULL
+  ),
+  (
+    @wang_wu_user_id,
+    @res_demo_006_id,
+    @violation_demo_006_id,
+    (SELECT id FROM notification_templates WHERE template_key = 'violation_created' AND channel = 'in_app' AND language_code = 'zh-CN'),
+    'in_app',
+    'violation_created',
+    'sent',
+    TIMESTAMP(CURRENT_DATE, '08:16:00'),
+    TIMESTAMP(CURRENT_DATE, '08:16:01'),
+    'violation_created:RSV-DMO-006',
+    JSON_OBJECT('violation_type', 'no_checkin', 'reservation_no', 'RSV-DMO-006', 'points', 1),
+    NULL
+  ),
+  (
+    @sun_qi_user_id,
+    @res_demo_011_id,
+    @violation_demo_011_id,
+    (SELECT id FROM notification_templates WHERE template_key = 'violation_created' AND channel = 'in_app' AND language_code = 'zh-CN'),
+    'in_app',
+    'violation_created',
+    'sent',
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:51:00'),
+    TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:51:01'),
+    'violation_created:RSV-DMO-011',
+    JSON_OBJECT('violation_type', 'late_cancel', 'reservation_no', 'RSV-DMO-011', 'points', 1),
+    NULL
+  ),
+  (
+    @chen_mo_user_id,
+    NULL,
+    @violation_demo_009_id,
+    (SELECT id FROM notification_templates WHERE template_key = 'appeal_result' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'appeal_result',
+    'sent',
+    TIMESTAMP(CURRENT_DATE, '10:01:00'),
+    TIMESTAMP(CURRENT_DATE, '10:01:03'),
+    'appeal_result:VIO-DMO-009',
+    JSON_OBJECT('appeal_status', 'approved', 'reservation_no', 'RSV-DMO-009', 'review_note', '经审核撤销违约'),
+    NULL
+  ),
+  (
+    @sun_qi_user_id,
+    NULL,
+    @violation_demo_011_id,
+    (SELECT id FROM notification_templates WHERE template_key = 'appeal_result' AND channel = 'email' AND language_code = 'zh-CN'),
+    'email',
+    'appeal_result',
+    'failed',
+    TIMESTAMP(CURRENT_DATE, '15:01:00'),
+    NULL,
+    'appeal_result:VIO-DMO-011',
+    JSON_OBJECT('appeal_status', 'rejected', 'reservation_no', 'RSV-DMO-011', 'review_note', '不满足豁免条件'),
+    'SMTP provider timeout'
+  );
+
+SET @job_reservation_created_001_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'reservation_created:RSV-DMO-001');
+SET @job_reservation_created_004_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'reservation_created:RSV-DMO-004');
+SET @job_reservation_created_005_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'reservation_created:RSV-DMO-005');
+SET @job_checkin_warning_006_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'checkin_warning:RSV-DMO-006');
+SET @job_violation_created_006_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'violation_created:RSV-DMO-006');
+SET @job_violation_created_011_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'violation_created:RSV-DMO-011');
+SET @job_appeal_result_009_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'appeal_result:VIO-DMO-009');
+SET @job_appeal_result_011_id := (SELECT id FROM notification_jobs WHERE dedupe_key = 'appeal_result:VIO-DMO-011');
+
+INSERT INTO notification_deliveries (
+  notification_job_id,
+  provider_name,
+  provider_message_id,
+  delivery_status,
+  response_code,
+  response_message,
+  retry_count,
+  delivered_at
+) VALUES
+  (@job_reservation_created_001_id, 'smtp-demo', 'smtp-r001', 'delivered', '250', 'Queued and accepted', 0, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '20:31:07')),
+  (@job_reservation_created_004_id, 'smtp-demo', 'smtp-r004', 'delivered', '250', 'Queued and accepted', 0, TIMESTAMP(CURRENT_DATE, '10:20:10')),
+  (@job_reservation_created_005_id, 'smtp-demo', 'smtp-r005', 'sent', '202', 'Accepted for delivery', 0, NULL),
+  (@job_checkin_warning_006_id, 'smtp-demo', 'smtp-w006', 'delivered', '250', 'Warning email delivered', 0, TIMESTAMP(CURRENT_DATE, '08:10:05')),
+  (@job_violation_created_006_id, 'inapp-demo', 'inapp-v006', 'delivered', '200', 'Stored in inbox', 0, TIMESTAMP(CURRENT_DATE, '08:16:02')),
+  (@job_violation_created_011_id, 'inapp-demo', 'inapp-v011', 'delivered', '200', 'Stored in inbox', 0, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:51:03')),
+  (@job_appeal_result_009_id, 'smtp-demo', 'smtp-a009', 'delivered', '250', 'Appeal result delivered', 0, TIMESTAMP(CURRENT_DATE, '10:01:06')),
+  (@job_appeal_result_011_id, 'smtp-demo', 'smtp-a011', 'failed', '504', 'Gateway timeout on remote provider', 2, NULL);
+
+INSERT INTO ai_conversations (
+  user_id,
+  channel,
+  session_token,
+  conversation_title,
+  conversation_status,
+  context_json,
+  last_message_at
+) VALUES
+  (
+    @zhang_san_user_id,
+    'web',
+    'demo-seat-search-001',
+    '明天空位查询',
+    'active',
+    JSON_OBJECT('preferred_room', 'LIB-301', 'filters', JSON_ARRAY('window', 'socket')),
+    TIMESTAMP(CURRENT_DATE, '19:32:00')
+  ),
+  (
+    @sun_qi_user_id,
+    'mini_program',
+    'demo-checkin-help-001',
+    '签到规则咨询',
+    'closed',
+    JSON_OBJECT('topic', 'checkin_policy', 'language', 'zh-CN'),
+    TIMESTAMP(CURRENT_DATE, '09:08:00')
+  ),
+  (
+    @chen_mo_user_id,
+    'web',
+    'demo-booking-flow-001',
+    '助手代预约',
+    'closed',
+    JSON_OBJECT('target_room', 'CS-201', 'booking_date', DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY)),
+    TIMESTAMP(CURRENT_DATE, '14:06:00')
+  );
+
+SET @ai_conv_search_id := (SELECT id FROM ai_conversations WHERE session_token = 'demo-seat-search-001');
+SET @ai_conv_policy_id := (SELECT id FROM ai_conversations WHERE session_token = 'demo-checkin-help-001');
+SET @ai_conv_booking_id := (SELECT id FROM ai_conversations WHERE session_token = 'demo-booking-flow-001');
+
+INSERT INTO ai_messages (
+  conversation_id,
+  message_role,
+  content_text,
+  intent_code,
+  referenced_entity_type,
+  referenced_entity_id,
+  metadata_json,
+  created_at
+) VALUES
+  (
+    @ai_conv_search_id,
+    'user',
+    '明天上午还有靠窗且有插座的座位吗？',
+    'seat_search',
+    NULL,
+    NULL,
+    JSON_OBJECT('filters', JSON_ARRAY('window_side', 'has_power'), 'date', DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY)),
+    TIMESTAMP(CURRENT_DATE, '19:30:00')
+  ),
+  (
+    @ai_conv_search_id,
+    'tool',
+    '已匹配到 LIB-301 的 A01、A02 两个候选座位。',
+    'seat_search',
+    'study_room',
+    @lib_room_id,
+    JSON_OBJECT('seat_codes', JSON_ARRAY('A01', 'A02'), 'result_count', 2),
+    TIMESTAMP(CURRENT_DATE, '19:31:00')
+  ),
+  (
+    @ai_conv_search_id,
+    'assistant',
+    '明天上午推荐你选择 LIB-301 的 A01 或 A02，二者都靠近窗边，其中 A02 靠近插座。',
+    'seat_search',
+    'study_room',
+    @lib_room_id,
+    JSON_OBJECT('recommended_seat', 'A02'),
+    TIMESTAMP(CURRENT_DATE, '19:32:00')
+  ),
+  (
+    @ai_conv_policy_id,
+    'user',
+    '签到码过了十五分钟还能补签吗？',
+    'checkin_policy_query',
+    NULL,
+    NULL,
+    JSON_OBJECT('topic', 'deadline_after_start_minutes'),
+    TIMESTAMP(CURRENT_DATE, '09:06:00')
+  ),
+  (
+    @ai_conv_policy_id,
+    'assistant',
+    '当前规则是预约开始后 15 分钟内完成签到，超过截止时间系统会自动记违约，不能补签。',
+    'checkin_policy_query',
+    'system_setting',
+    NULL,
+    JSON_OBJECT('setting_key', 'checkin.deadline_after_start_minutes', 'setting_value', 15),
+    TIMESTAMP(CURRENT_DATE, '09:08:00')
+  ),
+  (
+    @ai_conv_booking_id,
+    'user',
+    '帮我订后天下午计算机学院最安静的座位。',
+    'booking_create',
+    'study_room',
+    @cs_room_id,
+    JSON_OBJECT('filters', JSON_ARRAY('quiet_level'), 'reservation_date', DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY)),
+    TIMESTAMP(CURRENT_DATE, '14:04:00')
+  ),
+  (
+    @ai_conv_booking_id,
+    'tool',
+    '已检索到 Q02、Q03、Q04，其中 Q02 与 Q03 空闲且安静度较高。',
+    'booking_create',
+    'study_room',
+    @cs_room_id,
+    JSON_OBJECT('seat_codes', JSON_ARRAY('Q02', 'Q03', 'Q04'), 'selected', 'Q02'),
+    TIMESTAMP(CURRENT_DATE, '14:05:00')
+  ),
+  (
+    @ai_conv_booking_id,
+    'assistant',
+    '已经为你预定后天下午 14:00-16:00 的 Q02 静音座位。',
+    'booking_create',
+    'reservation',
+    @res_demo_005_id,
+    JSON_OBJECT('reservation_no', 'RSV-DMO-005', 'seat_code', 'Q02'),
+    TIMESTAMP(CURRENT_DATE, '14:06:00')
+  );
+
+SET @ai_msg_search_user_id := (SELECT id FROM ai_messages WHERE conversation_id = @ai_conv_search_id AND message_role = 'user' AND content_text = '明天上午还有靠窗且有插座的座位吗？');
+SET @ai_msg_policy_user_id := (SELECT id FROM ai_messages WHERE conversation_id = @ai_conv_policy_id AND message_role = 'user' AND content_text = '签到码过了十五分钟还能补签吗？');
+SET @ai_msg_booking_user_id := (SELECT id FROM ai_messages WHERE conversation_id = @ai_conv_booking_id AND message_role = 'user' AND content_text = '帮我订后天下午计算机学院最安静的座位。');
+
+INSERT INTO ai_intents (
+  conversation_id,
+  message_id,
+  intent_code,
+  confidence_score,
+  extracted_slots_json,
+  route_status
+) VALUES
+  (
+    @ai_conv_search_id,
+    @ai_msg_search_user_id,
+    'seat_search',
+    0.9320,
+    JSON_OBJECT('date', DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), 'features', JSON_ARRAY('window_side', 'has_power')),
+    'matched_rule'
+  ),
+  (
+    @ai_conv_policy_id,
+    @ai_msg_policy_user_id,
+    'checkin_policy_query',
+    0.9010,
+    JSON_OBJECT('setting_key', 'checkin.deadline_after_start_minutes'),
+    'matched_rule'
+  ),
+  (
+    @ai_conv_booking_id,
+    @ai_msg_booking_user_id,
+    'booking_create',
+    0.9640,
+    JSON_OBJECT('reservation_date', DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), 'time_range', '14:00-16:00', 'preferred_room', 'CS-201'),
+    'executed'
+  );
+
+INSERT INTO ai_action_logs (
+  conversation_id,
+  message_id,
+  action_type,
+  target_type,
+  target_id,
+  action_status,
+  request_json,
+  response_json
+) VALUES
+  (
+    @ai_conv_search_id,
+    @ai_msg_search_user_id,
+    'seat_search',
+    'study_room',
+    @lib_room_id,
+    'success',
+    JSON_OBJECT('date', DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), 'filters', JSON_ARRAY('window_side', 'has_power')),
+    JSON_OBJECT('matched_seats', JSON_ARRAY('A01', 'A02'), 'selected_room', 'LIB-301')
+  ),
+  (
+    @ai_conv_policy_id,
+    @ai_msg_policy_user_id,
+    'policy_lookup',
+    'system_setting',
+    NULL,
+    'success',
+    JSON_OBJECT('setting_key', 'checkin.deadline_after_start_minutes'),
+    JSON_OBJECT('value', '15', 'unit', 'minutes')
+  ),
+  (
+    @ai_conv_booking_id,
+    @ai_msg_booking_user_id,
+    'reservation_create',
+    'reservation',
+    @res_demo_005_id,
+    'success',
+    JSON_OBJECT('reservation_date', DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY), 'seat_code', 'Q02', 'time_range', '14:00-16:00'),
+    JSON_OBJECT('reservation_no', 'RSV-DMO-005', 'study_room', 'CS-201', 'seat_code', 'Q02')
+  );
+
+INSERT INTO seat_status_windows (
+  seat_id,
+  window_status,
+  starts_at,
+  ends_at,
+  reason_text,
+  created_by
+) VALUES
+  (
+    @seat_cs_q04_id,
+    'maintenance',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 3 DAY), '12:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 3 DAY), '16:00:00'),
+    '计划进行静音仓隔断检修。',
+    @cs_admin_user_id
+  ),
+  (
+    @seat_lib_b01_id,
+    'reserved_only',
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 4 DAY), '07:00:00'),
+    TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 4 DAY), '12:00:00'),
+    '校级英语竞赛期间预留给志愿者使用。',
+    @ops_admin_user_id
+  );
+
+INSERT INTO audit_logs (
+  actor_user_id,
+  request_id,
+  action_module,
+  action_type,
+  resource_type,
+  resource_id,
+  ip_address,
+  user_agent,
+  before_json,
+  after_json,
+  created_at
+) VALUES
+  (
+    @ops_admin_user_id,
+    'REQ-DEMO-001',
+    'reservation',
+    'proxy_book',
+    'reservation',
+    @res_demo_008_id,
+    '10.20.0.11',
+    'Mozilla/5.0 Demo Admin',
+    NULL,
+    JSON_OBJECT('reservation_no', 'RSV-DMO-008', 'user_id', @zhang_san_user_id, 'seat_code', 'Q04'),
+    TIMESTAMP(CURRENT_DATE, '15:10:00')
+  ),
+  (
+    @admin_user_id,
+    'REQ-DEMO-002',
+    'violation',
+    'review_appeal',
+    'violation',
+    @violation_demo_011_id,
+    '10.20.0.12',
+    'Mozilla/5.0 Demo Admin',
+    JSON_OBJECT('appeal_status', 'pending'),
+    JSON_OBJECT('appeal_status', 'rejected', 'review_note', '不满足豁免条件'),
+    TIMESTAMP(CURRENT_DATE, '15:00:00')
+  ),
+  (
+    @ops_admin_user_id,
+    'REQ-DEMO-003',
+    'violation',
+    'revoke',
+    'violation',
+    @violation_demo_009_id,
+    '10.20.0.13',
+    'Mozilla/5.0 Demo Ops',
+    JSON_OBJECT('violation_status', 'active'),
+    JSON_OBJECT('violation_status', 'revoked', 'revoked_reason', '课程冲突证明成立'),
+    TIMESTAMP(CURRENT_DATE, '10:02:00')
+  ),
+  (
+    @cs_admin_user_id,
+    'REQ-DEMO-004',
+    'seat',
+    'schedule_maintenance',
+    'seat',
+    @seat_cs_q04_id,
+    '10.20.0.14',
+    'Mozilla/5.0 Demo Admin',
+    JSON_OBJECT('window_status', 'active'),
+    JSON_OBJECT('window_status', 'maintenance', 'starts_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 3 DAY), '12:00:00')),
+    TIMESTAMP(CURRENT_DATE, '16:00:00')
+  ),
+  (
+    @ops_admin_user_id,
+    'REQ-DEMO-005',
+    'notification',
+    'dispatch_result',
+    'notification_job',
+    @job_appeal_result_011_id,
+    '10.20.0.15',
+    'Mozilla/5.0 Demo Ops',
+    JSON_OBJECT('job_status', 'pending'),
+    JSON_OBJECT('job_status', 'failed', 'failure_reason', 'SMTP provider timeout'),
+    TIMESTAMP(CURRENT_DATE, '15:02:00')
+  );
+
+INSERT INTO business_events (event_type, aggregate_type, aggregate_id, actor_user_id, occurred_at, event_date, payload_json)
+VALUES
+  ('reservation_created', 'reservation', @res_demo_004_id, @sun_qi_user_id, TIMESTAMP(CURRENT_DATE, '10:20:00'), CURRENT_DATE, JSON_OBJECT('reservation_no', 'RSV-DMO-004', 'channel', 'web')),
+  ('reservation_created', 'reservation', @res_demo_008_id, @ops_admin_user_id, TIMESTAMP(CURRENT_DATE, '15:10:00'), CURRENT_DATE, JSON_OBJECT('reservation_no', 'RSV-DMO-008', 'channel', 'admin', 'proxy_for', @zhang_san_user_id)),
+  ('reservation_checked_in', 'reservation', @res_demo_003_id, @zhao_liu_user_id, TIMESTAMP(CURRENT_DATE, '08:59:00'), CURRENT_DATE, JSON_OBJECT('reservation_no', 'RSV-DMO-003', 'seat_code', 'Q01')),
+  ('violation_created', 'violation', @violation_demo_006_id, NULL, TIMESTAMP(CURRENT_DATE, '08:16:00'), CURRENT_DATE, JSON_OBJECT('reservation_no', 'RSV-DMO-006', 'violation_type', 'no_checkin')),
+  ('violation_created', 'violation', @violation_demo_011_id, NULL, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00'), DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), JSON_OBJECT('reservation_no', 'RSV-DMO-011', 'violation_type', 'late_cancel')),
+  ('appeal_submitted', 'violation', @violation_demo_006_id, @wang_wu_user_id, TIMESTAMP(CURRENT_DATE, '11:00:00'), CURRENT_DATE, JSON_OBJECT('appeal_status', 'pending')),
+  ('appeal_reviewed', 'violation', @violation_demo_009_id, @ops_admin_user_id, TIMESTAMP(CURRENT_DATE, '10:00:00'), CURRENT_DATE, JSON_OBJECT('appeal_status', 'approved', 'violation_status', 'revoked')),
+  ('seat_status_window_created', 'seat', @seat_cs_q04_id, @cs_admin_user_id, TIMESTAMP(CURRENT_DATE, '16:00:00'), CURRENT_DATE, JSON_OBJECT('window_status', 'maintenance', 'starts_at', TIMESTAMP(DATE_ADD(CURRENT_DATE, INTERVAL 3 DAY), '12:00:00')));
+
+INSERT INTO room_daily_stats (
+  stats_date,
+  study_room_id,
+  reservation_count,
+  active_user_count,
+  seat_hour_total,
+  seat_hour_booked,
+  seat_hour_checked_in,
+  violation_count,
+  utilization_rate
+) VALUES
+  (DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), @lib_room_id, 1, 1, 90, 2, 2, 0, 0.0222),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), @lib_room_id, 1, 1, 90, 2, 0, 1, 0.0222),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), @lib_room_id, 3, 3, 90, 7, 5, 1, 0.0778),
+  (CURRENT_DATE, @lib_room_id, 1, 1, 90, 2, 0, 1, 0.0222),
+  (CURRENT_DATE, @cs_room_id, 1, 1, 52, 2, 2, 0, 0.0385);
+
+INSERT INTO seat_daily_stats (
+  stats_date,
+  seat_id,
+  reservation_count,
+  occupied_hours,
+  checked_in_hours,
+  violation_count,
+  heat_score
+) VALUES
+  (DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), @seat_lib_c02_id, 1, 2, 2, 0, 0.4100),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), @seat_lib_c01_id, 1, 2, 0, 1, 0.6700),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), @seat_lib_a01_id, 2, 4, 2, 1, 0.7800),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), @seat_lib_a02_id, 1, 3, 3, 0, 0.7200),
+  (CURRENT_DATE, @seat_lib_b02_id, 1, 2, 0, 1, 0.5800),
+  (CURRENT_DATE, @seat_cs_q01_id, 1, 2, 2, 0, 0.8100);
+
+INSERT INTO user_daily_stats (
+  stats_date,
+  user_id,
+  reservation_count,
+  checked_in_count,
+  cancel_count,
+  violation_count,
+  last_active_at
+) VALUES
+  (DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), @wang_wu_user_id, 1, 1, 0, 0, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '15:03:00')),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), @chen_mo_user_id, 1, 0, 0, 1, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '18:16:00')),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), @zhang_san_user_id, 1, 1, 0, 0, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '11:05:00')),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), @li_si_user_id, 1, 1, 0, 0, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '17:05:00')),
+  (DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), @sun_qi_user_id, 1, 0, 1, 1, TIMESTAMP(DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY), '18:50:00')),
+  (CURRENT_DATE, @wang_wu_user_id, 1, 0, 0, 1, TIMESTAMP(CURRENT_DATE, '08:16:00')),
+  (CURRENT_DATE, @zhao_liu_user_id, 1, 1, 0, 0, TIMESTAMP(CURRENT_DATE, '08:59:00'));
