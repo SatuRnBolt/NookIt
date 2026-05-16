@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.user.mapper.UserAdminMapper">
+
+    <select id="pageStudents" resultType="com.nookit.modules.admin.user.dto.StudentUserVO">
+        SELECT
+            u.id,
+            u.full_name AS name,
+            u.student_no AS studentId,
+            u.email,
+            o.org_name AS department,
+            u.violation_count AS violationCount,
+            u.account_status AS status,
+            u.created_at AS createdAt
+        FROM users u
+        LEFT JOIN organizations o ON o.id = u.primary_organization_id
+        WHERE u.user_type = 'student' AND u.deleted_at IS NULL
+        <if test="q.search != null and q.search != ''">
+            AND (u.full_name LIKE CONCAT('%', #{q.search}, '%')
+              OR u.student_no LIKE CONCAT('%', #{q.search}, '%')
+              OR u.email LIKE CONCAT('%', #{q.search}, '%'))
+        </if>
+        <if test="q.status != null and q.status != ''">
+            AND u.account_status = #{q.status}
+        </if>
+        ORDER BY u.created_at DESC
+    </select>
+
+    <select id="findStudentDetail" resultType="com.nookit.modules.admin.user.dto.StudentUserVO">
+        SELECT
+            u.id,
+            u.full_name AS name,
+            u.student_no AS studentId,
+            u.email,
+            o.org_name AS department,
+            u.violation_count AS violationCount,
+            u.account_status AS status,
+            u.created_at AS createdAt
+        FROM users u
+        LEFT JOIN organizations o ON o.id = u.primary_organization_id
+        WHERE u.id = #{id} AND u.deleted_at IS NULL
+    </select>
+
+    <select id="pageAdmins" resultType="com.nookit.modules.admin.user.dto.AdminUserVO">
+        SELECT
+            u.id,
+            u.full_name AS name,
+            u.email,
+            r.id AS roleId,
+            r.role_name AS roleName,
+            u.account_status AS status,
+            u.last_login_at AS lastLogin,
+            u.created_at AS createdAt
+        FROM users u
+        LEFT JOIN user_roles ur ON ur.user_id = u.id AND ur.is_primary = 1
+        LEFT JOIN roles r ON r.id = ur.role_id
+        WHERE u.user_type IN ('staff', 'mixed') AND u.deleted_at IS NULL
+        <if test="q.search != null and q.search != ''">
+            AND (u.full_name LIKE CONCAT('%', #{q.search}, '%')
+              OR u.email LIKE CONCAT('%', #{q.search}, '%'))
+        </if>
+        ORDER BY u.created_at DESC
+    </select>
+
+</mapper>

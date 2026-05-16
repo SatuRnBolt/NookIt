@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.settings.mapper.SettingsMapper">
+
+    <select id="pageSettingsLogs" resultType="map">
+        SELECT
+            al.id,
+            u.full_name AS userName,
+            al.created_at AS time,
+            CONCAT(al.action_type, ' ', al.resource_type) AS detail
+        FROM audit_logs al
+        LEFT JOIN users u ON u.id = al.actor_user_id
+        WHERE al.action_module = 'settings'
+        ORDER BY al.created_at DESC
+    </select>
+
+</mapper>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.auth.mapper.AuthMapper">
+
+    <select id="findCredentialByIdentity" resultType="map">
+        SELECT
+            u.id        AS userId,
+            u.user_type AS userType,
+            u.account_status AS accountStatus,
+            u.full_name AS fullName,
+            u.email,
+            u.student_no AS studentNo,
+            ai.credential_hash AS credentialHash,
+            ai.identity_type AS identityType
+        FROM auth_identities ai
+        JOIN users u ON u.id = ai.user_id
+        WHERE ai.identity_key = #{identityKey}
+          AND ai.identity_type IN ('email_password','student_no_password','employee_no_password')
+          AND u.deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <select id="findRolesByUserId" resultType="string">
+        SELECT r.role_code
+        FROM user_roles ur
+        JOIN roles r ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND r.role_status = 'active'
+          AND (ur.effective_to IS NULL OR ur.effective_to > NOW())
+    </select>
+
+    <select id="findPermissionsByUserId" resultType="string">
+        SELECT DISTINCT p.permission_code
+        FROM user_roles ur
+        JOIN roles r ON r.id = ur.role_id
+        JOIN role_permissions rp ON rp.role_id = r.id
+        JOIN permissions p ON p.id = rp.permission_id
+        WHERE ur.user_id = #{userId}
+          AND r.role_status = 'active'
+          AND (ur.effective_to IS NULL OR ur.effective_to > NOW())
+    </select>
+
+    <update id="updateLastLoginAt">
+        UPDATE users SET last_login_at = NOW() WHERE id = #{userId}
+    </update>
+
+</mapper>

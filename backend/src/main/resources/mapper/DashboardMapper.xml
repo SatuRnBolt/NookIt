@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.dashboard.mapper.DashboardMapper">
+
+    <select id="querySummary" resultType="map">
+        SELECT
+            (SELECT COUNT(*) FROM reservations WHERE reservation_date = CURDATE() AND deleted_at IS NULL) AS todayBookings,
+            (SELECT COUNT(*) FROM study_rooms WHERE room_status = 'active' AND deleted_at IS NULL) AS activeRooms,
+            (SELECT COALESCE(SUM(total_capacity), 0) FROM study_rooms WHERE room_status = 'active' AND deleted_at IS NULL) AS totalSeats,
+            (SELECT ROUND(
+                COALESCE(SUM(seat_hour_booked),0) * 100.0 / NULLIF(COALESCE(SUM(seat_hour_total),0), 0), 1)
+             FROM room_daily_stats WHERE stats_date = CURDATE()) AS occupancyRate
+    </select>
+
+    <select id="queryWeeklyTrend" resultType="map">
+        SELECT
+            DATE_FORMAT(reservation_date, '%W') AS label,
+            COUNT(*) AS value,
+            reservation_date AS date
+        FROM reservations
+        WHERE reservation_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND CURDATE()
+          AND deleted_at IS NULL
+        GROUP BY reservation_date
+        ORDER BY reservation_date
+    </select>
+
+    <select id="queryRoomOccupancy" resultType="map">
+        SELECT
+            COALESCE(sr.display_name, sr.room_name) AS roomName,
+            ROUND(COALESCE(rds.utilization_rate, 0) * 100, 1) AS rate
+        FROM study_rooms sr
+        LEFT JOIN room_daily_stats rds ON rds.study_room_id = sr.id AND rds.stats_date = CURDATE()
+        WHERE sr.room_status = 'active' AND sr.deleted_at IS NULL
+        ORDER BY rate DESC
+        LIMIT #{top}
+    </select>
+
+    <select id="queryHeatmapData" resultType="map">
+        SELECT
+            DATE_FORMAT(r.reservation_date, '%W') AS day,
+            r.start_hour AS hour,
+            COUNT(*) AS value
+        FROM reservations r
+        WHERE r.reservation_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND CURDATE()
+          AND r.deleted_at IS NULL
+        GROUP BY r.reservation_date, r.start_hour
+        ORDER BY r.reservation_date, r.start_hour
+    </select>
+
+    <select id="queryTodos" resultType="map">
+        SELECT
+            (SELECT COUNT(*) FROM user_feedbacks WHERE feedback_status = 'pending' AND deleted_at IS NULL) AS pendingFeedback,
+            (SELECT COUNT(*) FROM admin_notices WHERE notice_status = 'draft' AND deleted_at IS NULL) AS draftNotices,
+            (SELECT COUNT(*) FROM users WHERE violation_count >= 3 AND account_status != 'suspended' AND deleted_at IS NULL) AS heavyViolations,
+            (SELECT COUNT(*) FROM reservations WHERE reservation_status = 'violated'
+                AND reservation_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND deleted_at IS NULL) AS missedBookings
+    </select>
+
+</mapper>

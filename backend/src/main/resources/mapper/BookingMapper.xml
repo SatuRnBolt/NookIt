@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.booking.mapper.BookingMapper">
+
+    <select id="pageBookings" resultType="com.nookit.modules.admin.booking.dto.BookingVO">
+        SELECT
+            r.id,
+            u.full_name AS studentName,
+            COALESCE(u.student_no, u.employee_no) AS studentId,
+            COALESCE(sr.display_name, sr.room_name) AS roomName,
+            s.seat_code AS seatNo,
+            r.reservation_date AS date,
+            r.start_hour AS startHour,
+            r.end_hour AS endHour,
+            r.reservation_status AS status,
+            r.created_at AS createdAt
+        FROM reservations r
+        JOIN users u ON u.id = r.user_id
+        JOIN study_rooms sr ON sr.id = r.study_room_id
+        JOIN seats s ON s.id = r.seat_id
+        WHERE r.deleted_at IS NULL
+        <if test="q.search != null and q.search != ''">
+            AND (u.full_name LIKE CONCAT('%', #{q.search}, '%')
+              OR u.student_no LIKE CONCAT('%', #{q.search}, '%')
+              OR s.seat_code LIKE CONCAT('%', #{q.search}, '%'))
+        </if>
+        <if test="q.status != null and q.status != ''">
+            AND r.reservation_status = #{q.status}
+        </if>
+        <if test="q.date != null and q.date != ''">
+            AND r.reservation_date = #{q.date}
+        </if>
+        <if test="q.tab == 'today'">
+            AND r.reservation_date = CURDATE()
+        </if>
+        <if test="q.tab == 'week'">
+            AND r.reservation_date BETWEEN DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+                                       AND DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 6 DAY)
+        </if>
+        ORDER BY r.created_at DESC
+    </select>
+
+    <select id="queryStats" resultType="com.nookit.modules.admin.booking.dto.BookingStatsVO">
+        SELECT
+            SUM(CASE WHEN reservation_date = CURDATE() AND deleted_at IS NULL THEN 1 ELSE 0 END) AS todayCount,
+            SUM(CASE WHEN reservation_date BETWEEN DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+                                               AND DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 6 DAY)
+                     AND deleted_at IS NULL THEN 1 ELSE 0 END) AS weekCount,
+            SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) AS totalCount
+        FROM reservations
+    </select>
+
+</mapper>

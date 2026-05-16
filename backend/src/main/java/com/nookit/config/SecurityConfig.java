@@ -37,6 +37,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   @org.springframework.beans.factory.annotation.Qualifier("corsConfigurationSource") 
                                                    CorsConfigurationSource corsSource) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsSource))
