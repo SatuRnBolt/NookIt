@@ -738,10 +738,12 @@ CREATE TABLE ai_action_logs (
   target_type VARCHAR(32) NULL,
   target_id BIGINT UNSIGNED NULL,
   action_status ENUM('pending', 'success', 'failed', 'ignored') NOT NULL DEFAULT 'pending',
+  idempotency_key VARCHAR(64) NULL,
   request_json JSON NULL,
   response_json JSON NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_action_logs_idem (conversation_id, idempotency_key),
   KEY idx_ai_action_logs_conversation (conversation_id, created_at),
   CONSTRAINT fk_ai_action_logs_conversation FOREIGN KEY (conversation_id) REFERENCES ai_conversations (id),
   CONSTRAINT fk_ai_action_logs_message FOREIGN KEY (message_id) REFERENCES ai_messages (id)
