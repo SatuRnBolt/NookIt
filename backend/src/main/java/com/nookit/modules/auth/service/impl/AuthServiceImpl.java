@@ -78,11 +78,23 @@ public class AuthServiceImpl implements AuthService {
     public UserInfoVO me(UserPrincipal principal) {
         UserInfoVO vo = new UserInfoVO();
         vo.setId(principal.getUserId());
-        vo.setName(principal.getFullName());
         vo.setEmail(principal.getUsername());
         vo.setUserType(principal.getUserType());
         vo.setRoles(List.copyOf(principal.getRoles()));
         vo.setPermissions(List.copyOf(principal.getPermissions()));
+
+        // JWT 里没有存完整用户信息，查 DB 补全
+        Map<String, Object> profile = authMapper.findUserProfileById(principal.getUserId());
+        if (profile != null) {
+            vo.setName((String) profile.get("name"));
+            vo.setNickname((String) profile.get("nickname"));
+            vo.setAvatarUrl((String) profile.get("avatarUrl"));
+            vo.setPhone((String) profile.get("phone"));
+            vo.setStudentNo((String) profile.get("studentNo"));
+            Number vc = (Number) profile.get("violationCount");
+            vo.setViolationCount(vc != null ? vc.intValue() : 0);
+        }
+
         return vo;
     }
 }

@@ -59,10 +59,10 @@ public class StudentReservationServiceImpl implements StudentReservationService 
             m.put("seat_code", seat != null ? seat.getSeatCode() : null);
             m.put("date", r.getReservationDate() != null ? r.getReservationDate().toString() : null);
             m.put("reservation_date", r.getReservationDate() != null ? r.getReservationDate().toString() : null);
-            m.put("startHour", r.getStartHour());
-            m.put("start_hour", r.getStartHour());
-            m.put("endHour", r.getEndHour());
-            m.put("end_hour", r.getEndHour());
+            String st = r.getStartAt() != null ? r.getStartAt().toLocalTime().toString().substring(0, 5) : null;
+            String et = r.getEndAt()   != null ? r.getEndAt().toLocalTime().toString().substring(0, 5)   : null;
+            m.put("startTime",  st); m.put("start_time", st);
+            m.put("endTime",    et); m.put("end_time",   et);
             m.put("status", r.getReservationStatus());
             m.put("reservation_status", r.getReservationStatus());
             m.put("checkinCode", r.getNotesText());
@@ -85,17 +85,33 @@ public class StudentReservationServiceImpl implements StudentReservationService 
             throw new BusinessException(ResultCode.SEAT_UNAVAILABLE);
         }
 
-        // check time slot availability
+        // 解析 HH:mm 时间字符串
+        java.time.LocalTime startLocalTime = java.time.LocalTime.parse(req.getStartTime());
+        java.time.LocalTime endLocalTime   = java.time.LocalTime.parse(req.getEndTime());
+        if (!endLocalTime.isAfter(startLocalTime)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST);
+        }
+        long durationMinutes = java.time.Duration.between(startLocalTime, endLocalTime).toMinutes();
+        if (durationMinutes > 240) {
+            throw new BusinessException(ResultCode.RESERVATION_OUT_OF_RANGE);
+        }
+
         LocalDate date = LocalDate.parse(req.getDate());
+        LocalDateTime reqStart = date.atTime(startLocalTime);
+        LocalDateTime reqEnd   = date.atTime(endLocalTime);
+
+        // 用 startAt/endAt 做精确冲突检测，支持半小时粒度
         List<Reservation> conflicts = bookingMapper.selectList(
                 new LambdaQueryWrapper<Reservation>()
                         .eq(Reservation::getSeatId, req.getSeatId())
                         .eq(Reservation::getReservationDate, date)
                         .notIn(Reservation::getReservationStatus, "cancelled")
         );
-        for (Reservation r : conflicts) {
-            if (r.getStartHour() == null || r.getEndHour() == null) continue;
-            if (req.getStartHour() < r.getEndHour() && req.getEndHour() > r.getStartHour()) {
+        for (Reservation existing : conflicts) {
+            LocalDateTime exStart = existing.getStartAt();
+            LocalDateTime exEnd   = existing.getEndAt();
+            if (exStart == null || exEnd == null) continue;
+            if (reqStart.isBefore(exEnd) && reqEnd.isAfter(exStart)) {
                 throw new BusinessException(ResultCode.RESERVATION_TIME_CONFLICT);
             }
         }
@@ -107,15 +123,15 @@ public class StudentReservationServiceImpl implements StudentReservationService 
         r.setStudyRoomId(seat.getStudyRoomId());
         r.setSeatId(req.getSeatId());
         r.setReservationDate(date);
-        r.setStartHour(req.getStartHour());
-        r.setEndHour(req.getEndHour());
-        r.setDurationHours(req.getEndHour() - req.getStartHour());
+        r.setStartAt(reqStart);
+        r.setEndAt(reqEnd);
+        r.setStartHour(startLocalTime.getHour());
+        r.setEndHour(endLocalTime.getHour());
+        r.setDurationHours((int) (durationMinutes / 60));
         r.setReservationStatus("pending_checkin");
-        r.setSourceChannel("student_portal");
+        r.setSourceChannel("web");
         r.setNotesText(String.format("%04d", new Random().nextInt(10000)));
-        r.setStartAt(date.atTime(req.getStartHour(), 0));
-        r.setEndAt(date.atTime(req.getEndHour(), 0));
-        r.setCheckinDeadlineAt(date.atTime(req.getStartHour(), 0).plusMinutes(15));
+        r.setCheckinDeadlineAt(reqStart.plusMinutes(15));
         bookingMapper.insert(r);
 
         Map<String, Object> result = new LinkedHashMap<>();

@@ -85,14 +85,16 @@ public class StudentRoomController {
                         .notIn(Reservation::getReservationStatus, "cancelled")
         );
 
+        // 返回半小时槽索引：0=7:00, 1=7:30, ..., 29=21:30
         Set<Integer> occupied = new TreeSet<>();
         for (Reservation r : reservations) {
-            if (r.getStartHour() == null || r.getEndHour() == null) continue;
-            for (int h = r.getStartHour(); h < r.getEndHour(); h++) {
-                int slot = h - 6; // 7→1, 8→2, ..., 21→15
-                if (slot >= 1 && slot <= 15) {
-                    occupied.add(slot);
-                }
+            if (r.getStartAt() == null || r.getEndAt() == null) continue;
+            java.time.LocalTime cur = r.getStartAt().toLocalTime();
+            java.time.LocalTime end = r.getEndAt().toLocalTime();
+            while (cur.isBefore(end)) {
+                int slotIndex = (cur.getHour() - 7) * 2 + (cur.getMinute() >= 30 ? 1 : 0);
+                if (slotIndex >= 0 && slotIndex <= 29) occupied.add(slotIndex);
+                cur = cur.plusMinutes(30);
             }
         }
 

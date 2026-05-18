@@ -46,4 +46,17 @@
         UPDATE users SET last_login_at = NOW() WHERE id = #{userId}
     </update>
 
+    <select id="findUserProfileById" resultType="map">
+        SELECT
+            u.full_name       AS name,
+            u.nickname,
+            u.avatar_url      AS avatarUrl,
+            u.phone,
+            u.student_no      AS studentNo,
+            u.violation_count AS violationCount
+        FROM users u
+        WHERE u.id = #{userId}
+          AND u.deleted_at IS NULL
+    </select>
+
 </mapper>

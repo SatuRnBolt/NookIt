@@ -21,4 +21,7 @@ public interface AuthMapper {
 
     /** 更新最后登录时间 */
     void updateLastLoginAt(@Param("userId") Long userId);
+
+    /** 根据用户 ID 查询完整个人信息 */
+    Map<String, Object> findUserProfileById(@Param("userId") Long userId);
 }

@@ -15,8 +15,23 @@ public class UserInfoVO {
     @Schema(description = "姓名")
     private String name;
 
+    @Schema(description = "昵称")
+    private String nickname;
+
     @Schema(description = "邮箱")
     private String email;
+
+    @Schema(description = "手机号")
+    private String phone;
+
+    @Schema(description = "学号")
+    private String studentNo;
+
+    @Schema(description = "头像 URL")
+    private String avatarUrl;
+
+    @Schema(description = "违规次数")
+    private Integer violationCount;
 
     @Schema(description = "用户类型：student / staff")
     private String userType;

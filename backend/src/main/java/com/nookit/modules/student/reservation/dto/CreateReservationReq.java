@@ -1,8 +1,7 @@
 package com.nookit.modules.student.reservation.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -18,13 +17,11 @@ public class CreateReservationReq {
     @Schema(description = "预约日期 yyyy-MM-dd")
     private String date;
 
-    @Min(7)
-    @Max(21)
-    @Schema(description = "开始小时 (7-21)")
-    private Integer startHour;
+    @NotBlank
+    @Schema(description = "开始时间 HH:mm，如 07:30")
+    private String startTime;
 
-    @Min(8)
-    @Max(22)
-    @Schema(description = "结束小时 (8-22)")
-    private Integer endHour;
+    @NotBlank
+    @Schema(description = "结束时间 HH:mm，如 09:00")
+    private String endTime;
 }
