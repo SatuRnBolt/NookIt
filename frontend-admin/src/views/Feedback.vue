@@ -170,15 +170,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   ChatDotRound, ChatLineRound, Search, Promotion,
   Loading, InfoFilled, CircleCheckFilled,
 } from '@element-plus/icons-vue'
-import { mockFeedback } from '../mock/data'
+import { getFeedbacks, updateFeedbackStatus, replyFeedback } from '../api/feedback'
 
-const feedbacks = ref([...mockFeedback])
+const feedbacks = ref([])
 const search = ref('')
 const filterType = ref('')
 const filterStatus = ref('')
@@ -189,7 +189,7 @@ const filteredFeedbacks = computed(() => {
   const list = feedbacks.value.filter(f => {
     if (search.value) {
       const q = search.value
-      if (!f.studentName.includes(q) && !f.studentId.includes(q) && !f.title.includes(q)) return false
+      if (!f.studentName?.includes(q) && !f.studentId?.includes(q) && !f.title?.includes(q)) return false
     }
     if (filterType.value && f.type !== filterType.value) return false
     if (filterStatus.value && f.status !== filterStatus.value) return false
@@ -198,7 +198,7 @@ const filteredFeedbacks = computed(() => {
   return list.sort((a, b) => {
     const order = { pending: 0, processing: 1, resolved: 2 }
     if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status]
-    return b.createdAt.localeCompare(a.createdAt)
+    return String(b.createdAt).localeCompare(String(a.createdAt))
   })
 })
 
@@ -206,6 +206,18 @@ const selected = computed(() => feedbacks.value.find(f => f.id === selectedId.va
 const pendingCount = computed(() => feedbacks.value.filter(f => f.status === 'pending').length)
 const processingCount = computed(() => feedbacks.value.filter(f => f.status === 'processing').length)
 const resolvedCount = computed(() => feedbacks.value.filter(f => f.status === 'resolved').length)
+
+async function loadFeedbacks() {
+  try {
+    const data = await getFeedbacks({ page: 1, pageSize: 200 })
+    feedbacks.value = data.records || data || []
+    if (!selectedId.value && filteredFeedbacks.value.length) {
+      selectedId.value = filteredFeedbacks.value[0].id
+    }
+  } catch { feedbacks.value = [] }
+}
+
+onMounted(loadFeedbacks)
 
 function typeLabel(t) {
   return { bug: '故障报告', suggestion: '功能建议', complaint: '投诉' }[t] || t
@@ -221,8 +233,8 @@ function statusLabel(s) {
 
 function shortTime(s) {
   if (!s) return ''
-  const parts = s.split(' ')
-  return parts[0]?.slice(5) || s
+  const parts = String(s).split('T')[0] || String(s).split(' ')[0]
+  return parts.slice(5) || s
 }
 
 function selectFeedback(f) {
@@ -230,32 +242,24 @@ function selectFeedback(f) {
   replyText.value = ''
 }
 
-function setStatus(f, status) {
-  const idx = feedbacks.value.findIndex(x => x.id === f.id)
-  if (idx !== -1) {
-    feedbacks.value[idx].status = status
+async function setStatus(f, status) {
+  try {
+    await updateFeedbackStatus(f.id, status)
+    const idx = feedbacks.value.findIndex(x => x.id === f.id)
+    if (idx !== -1) feedbacks.value[idx].status = status
     ElMessage.success('状态已更新')
-  }
+  } catch {}
 }
 
-function submitReply() {
-  if (!replyText.value.trim()) {
-    ElMessage.warning('请填写回复内容')
-    return
-  }
-  const idx = feedbacks.value.findIndex(f => f.id === selectedId.value)
-  if (idx !== -1) {
-    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
-    feedbacks.value[idx].reply = replyText.value
-    feedbacks.value[idx].repliedAt = now
-    feedbacks.value[idx].repliedBy = '张管理'
-    feedbacks.value[idx].status = 'resolved'
-  }
-  ElMessage.success('回复已提交，反馈已标记为已解决')
-  replyText.value = ''
+async function submitReply() {
+  if (!replyText.value.trim()) { ElMessage.warning('请填写回复内容'); return }
+  try {
+    await replyFeedback(selectedId.value, replyText.value)
+    await loadFeedbacks()
+    ElMessage.success('回复已提交，反馈已标记为已解决')
+    replyText.value = ''
+  } catch {}
 }
-
-if (filteredFeedbacks.value.length) selectedId.value = filteredFeedbacks.value[0].id
 </script>
 
 <style scoped>

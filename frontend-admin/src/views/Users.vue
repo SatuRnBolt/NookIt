@@ -107,14 +107,19 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockStudentUsers, mockAdminUsers, mockRoles } from '../mock/data'
+import { getStudents, updateStudentStatus, getAdmins, createAdmin, updateAdmin as updateAdminApi, deleteAdmin as deleteAdminApi } from '../api/users'
+import { getRoles } from '../api/roles'
 
 const activeTab = ref('students')
-const students = ref([...mockStudentUsers])
-const admins = ref([...mockAdminUsers])
-const roles = mockRoles
+const students = ref([])
+const stuTotal = ref(0)
+const stuPage = ref(1)
+const admins = ref([])
+const adminTotal = ref(0)
+const adminPage = ref(1)
+const roles = ref([])
 
 const stuSearch = ref('')
 const stuStatusFilter = ref('')
@@ -122,21 +127,43 @@ const adminSearch = ref('')
 const adminDialog = ref(false)
 const editingAdmin = ref(null)
 
-const adminForm = reactive({ name: '', email: '', password: '', role: 1 })
+const adminForm = reactive({ name: '', email: '', password: '', roleId: null })
 
-const filteredStudents = computed(() => students.value.filter(s => {
-  if (stuSearch.value && !s.name.includes(stuSearch.value) && !s.studentId.includes(stuSearch.value)) return false
-  if (stuStatusFilter.value && s.status !== stuStatusFilter.value) return false
-  return true
-}))
+const filteredStudents = computed(() => students.value)
+const filteredAdmins = computed(() => admins.value)
 
-const filteredAdmins = computed(() => admins.value.filter(a =>
-  !adminSearch.value || a.name.includes(adminSearch.value) || a.email.includes(adminSearch.value)
-))
+async function loadStudents() {
+  try {
+    const data = await getStudents({ page: stuPage.value, pageSize: 10, search: stuSearch.value, status: stuStatusFilter.value })
+    students.value = data.records || []
+    stuTotal.value = data.total || 0
+  } catch { students.value = [] }
+}
 
-function toggleStudentStatus(s) {
-  s.status = s.status === 'active' ? 'suspended' : 'active'
-  ElMessage.success(s.status === 'active' ? '已解封账号' : '已封号')
+async function loadAdmins() {
+  try {
+    const data = await getAdmins({ page: adminPage.value, pageSize: 10, search: adminSearch.value })
+    admins.value = data.records || []
+    adminTotal.value = data.total || 0
+  } catch { admins.value = [] }
+}
+
+async function loadRoles() {
+  try { roles.value = (await getRoles()) || [] } catch {}
+}
+
+watch([stuSearch, stuStatusFilter], () => { stuPage.value = 1; loadStudents() })
+watch([adminSearch], () => { adminPage.value = 1; loadAdmins() })
+
+onMounted(() => { loadStudents(); loadAdmins(); loadRoles() })
+
+async function toggleStudentStatus(s) {
+  const next = s.status === 'active' ? 'suspended' : 'active'
+  try {
+    await updateStudentStatus(s.id, next)
+    s.status = next
+    ElMessage.success(next === 'active' ? '已解封账号' : '已封号')
+  } catch {}
 }
 
 function viewViolations(s) {
@@ -145,43 +172,37 @@ function viewViolations(s) {
 
 function openAdminDialog(admin = null) {
   editingAdmin.value = admin
-  if (admin) {
-    Object.assign(adminForm, admin)
-  } else {
-    Object.assign(adminForm, { name: '', email: '', password: '', role: 1 })
-  }
+  Object.assign(adminForm, admin
+    ? { name: admin.name, email: admin.email, password: '', roleId: admin.roleId }
+    : { name: '', email: '', password: '', roleId: null })
   adminDialog.value = true
 }
 
-function saveAdmin() {
-  if (!adminForm.name || !adminForm.email) {
-    ElMessage.warning('请填写完整信息')
-    return
-  }
-  const role = roles.find(r => r.id === adminForm.role)
-  if (editingAdmin.value) {
-    Object.assign(editingAdmin.value, { ...adminForm, roleName: role?.name })
-    ElMessage.success('管理员信息已更新')
-  } else {
-    admins.value.push({
-      id: Date.now(), ...adminForm,
-      roleName: role?.name || '', status: 'active', lastLogin: '-', createdAt: new Date().toISOString().slice(0,10)
-    })
-    ElMessage.success('管理员已创建')
-  }
-  adminDialog.value = false
+async function saveAdmin() {
+  if (!adminForm.name || !adminForm.email) { ElMessage.warning('请填写完整信息'); return }
+  try {
+    if (editingAdmin.value) {
+      await updateAdminApi(editingAdmin.value.id, { name: adminForm.name, email: adminForm.email, roleId: adminForm.roleId })
+      ElMessage.success('管理员信息已更新')
+    } else {
+      await createAdmin({ name: adminForm.name, email: adminForm.email, password: adminForm.password, roleId: adminForm.roleId })
+      ElMessage.success('管理员已创建')
+    }
+    adminDialog.value = false
+    loadAdmins()
+  } catch {}
 }
 
 async function changeRole(admin) {
-  // Simple inline role change via prompt-like dialog
-  ElMessage.info('功能：在角色管理页配置角色后，可在此处分配')
+  ElMessage.info('请在编辑对话框中修改角色')
 }
 
 async function deleteAdmin(admin) {
   try {
     await ElMessageBox.confirm(`确定删除管理员 ${admin.name} 吗？`, '删除确认', { type: 'warning' })
-    admins.value = admins.value.filter(a => a.id !== admin.id)
+    await deleteAdminApi(admin.id)
     ElMessage.success('已删除')
+    loadAdmins()
   } catch {}
 }
 </script>

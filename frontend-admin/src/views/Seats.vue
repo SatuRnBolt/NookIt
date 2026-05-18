@@ -55,7 +55,7 @@
         </el-table-column>
       </el-table>
       <div class="table-footer">
-        共 {{ filteredSeats.length }} 个座位
+        共 {{ total }} 个座位
       </div>
     </div>
 
@@ -83,12 +83,15 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockSeats, mockRooms } from '../mock/data'
+import { getSeats, updateSeatStatus, deleteSeat as deleteSeatApi, getRoomsSimple } from '../api/seats'
 
-const seats = ref([...mockSeats])
-const rooms = mockRooms
+const seats = ref([])
+const rooms = ref([])
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(10)
 const search = ref('')
 const roomFilter = ref('')
 const statusFilter = ref('')
@@ -98,13 +101,27 @@ const editing = ref(null)
 
 const form = reactive({ roomId: '', roomName: '', seatNo: '', hasPower: false, nearWindow: false })
 
-const filteredSeats = computed(() => seats.value.filter(s => {
-  if (search.value && !s.seatNo.includes(search.value.toUpperCase())) return false
-  if (roomFilter.value && s.roomId !== roomFilter.value) return false
-  if (statusFilter.value && s.status !== statusFilter.value) return false
-  if (powerFilter.value && !s.hasPower) return false
-  return true
-}))
+const filteredSeats = computed(() => seats.value)
+
+async function loadSeats() {
+  try {
+    const data = await getSeats({
+      page: currentPage.value, pageSize: pageSize.value,
+      search: search.value, roomId: roomFilter.value,
+      status: statusFilter.value, hasPower: powerFilter.value || undefined,
+    })
+    seats.value = data.records || []
+    total.value = data.total || 0
+  } catch { seats.value = [] }
+}
+
+onMounted(async () => {
+  await loadSeats()
+  try { rooms.value = await getRoomsSimple() } catch {}
+})
+
+watch([search, roomFilter, statusFilter, powerFilter], () => { currentPage.value = 1; loadSeats() })
+watch([currentPage, pageSize], loadSeats)
 
 function seatStatusText(s) {
   return { available: '可用', booked: '已预约', unavailable: '不可用' }[s] || s
@@ -115,45 +132,38 @@ function seatStatusType(s) {
 }
 
 function onRoomChange(id) {
-  const r = rooms.find(r => r.id === id)
+  const r = rooms.value.find(r => r.id === id)
   form.roomName = r?.name || ''
 }
 
 function openDialog(seat = null) {
   editing.value = seat
-  if (seat) {
-    Object.assign(form, seat)
-  } else {
-    Object.assign(form, { roomId: '', roomName: '', seatNo: '', hasPower: false, nearWindow: false })
-  }
+  Object.assign(form, seat
+    ? { roomId: seat.roomId, roomName: seat.roomName, seatNo: seat.seatNo, hasPower: seat.hasPower, nearWindow: seat.nearWindow }
+    : { roomId: '', roomName: '', seatNo: '', hasPower: false, nearWindow: false })
   dialogVisible.value = true
 }
 
 function saveSeat() {
-  if (!form.roomId || !form.seatNo) {
-    ElMessage.warning('请填写完整信息')
-    return
-  }
-  if (editing.value) {
-    Object.assign(editing.value, { ...form })
-    ElMessage.success('座位信息已更新')
-  } else {
-    seats.value.push({ id: Date.now(), ...form, status: 'available', createdAt: new Date().toISOString().slice(0,10) })
-    ElMessage.success('座位已登记')
-  }
+  ElMessage.info('请通过自习室管理页面的座位地图编辑功能管理座位')
   dialogVisible.value = false
 }
 
-function toggleSeatStatus(seat) {
-  seat.status = seat.status === 'unavailable' ? 'available' : 'unavailable'
-  ElMessage.success('状态已更新')
+async function toggleSeatStatus(seat) {
+  const next = seat.status === 'unavailable' ? 'active' : 'inactive'
+  try {
+    await updateSeatStatus(seat.id, next)
+    seat.status = seat.status === 'unavailable' ? 'available' : 'unavailable'
+    ElMessage.success('状态已更新')
+  } catch {}
 }
 
 async function deleteSeat(seat) {
   try {
     await ElMessageBox.confirm(`确定注销座位 ${seat.seatNo} 吗？`, '注销确认', { type: 'warning' })
-    seats.value = seats.value.filter(s => s.id !== seat.id)
+    await deleteSeatApi(seat.id)
     ElMessage.success('座位已注销')
+    loadSeats()
   } catch {}
 }
 </script>

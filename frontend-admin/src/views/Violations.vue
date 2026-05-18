@@ -71,26 +71,47 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { mockViolations } from '../mock/data'
+import { getViolations, suspendStudent } from '../api/violations'
 
-const violations = ref([...mockViolations])
+const violations = ref([])
+const total = ref(0)
+const uniqueStudents = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
 const search = ref('')
+const loading = ref(false)
 
-const filteredViolations = computed(() => violations.value.filter(v => {
-  if (search.value && !v.studentName.includes(search.value) && !v.studentId.includes(search.value)) return false
-  return true
-}))
+const filteredViolations = computed(() => violations.value)
 
-const uniqueStudents = computed(() => new Set(violations.value.map(v => v.studentId)).size)
+async function loadViolations() {
+  loading.value = true
+  try {
+    const data = await getViolations({ page: currentPage.value, pageSize: pageSize.value, search: search.value })
+    violations.value = data.records || []
+    total.value = data.total || 0
+    uniqueStudents.value = new Set(violations.value.map(v => v.studentId)).size
+  } catch {
+    violations.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+watch([search], () => { currentPage.value = 1; loadViolations() })
+onMounted(loadViolations)
 
 function viewStudent(row) {
   ElMessage.info(`查看学生 ${row.studentName}（${row.studentId}）的详情`)
 }
 
-function suspend(row) {
-  ElMessage.warning(`已对 ${row.studentName} 发出封号警告（模拟）`)
+async function suspend(row) {
+  try {
+    await suspendStudent(row.studentId, { days: 7 })
+    ElMessage.warning(`已对 ${row.studentName} 发出封号`)
+    loadViolations()
+  } catch {}
 }
 </script>
 

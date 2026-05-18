@@ -49,13 +49,13 @@
             :disabled="activeTab !== 'all'"
           />
         </div>
-        <span class="filter-count">共 {{ filteredBookings.length }} 条</span>
+        <span class="filter-count">共 {{ total }} 条</span>
       </div>
     </div>
 
     <!-- Table Card -->
     <div class="content-card">
-      <el-table :data="pagedBookings" stripe style="width:100%">
+      <el-table :data="bookings" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="64" />
         <el-table-column label="学生" min-width="130">
           <template #default="{ row }">
@@ -91,7 +91,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="filteredBookings.length"
+          :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
           background
@@ -102,13 +102,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockBookings, mockRooms } from '../mock/data'
+import { getBookings, getBookingStats, cancelBooking as cancelBookingApi, checkinBooking } from '../api/bookings'
 
-const bookings = ref([...mockBookings])
-const allRooms = mockRooms
-
+const bookings = ref([])
+const total = ref(0)
 const search = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
@@ -116,47 +115,44 @@ const activeTab = ref('all')
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-const today = new Date().toISOString().slice(0, 10)
-
-function getWeekRange() {
-  const now = new Date()
-  const day = now.getDay() || 7
-  const mon = new Date(now); mon.setDate(now.getDate() - day + 1); mon.setHours(0,0,0,0)
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999)
-  return [mon.toISOString().slice(0,10), sun.toISOString().slice(0,10)]
-}
-const [weekStart, weekEnd] = getWeekRange()
-
-const todayCount = computed(() => bookings.value.filter(b => b.date === today).length)
-const weekCount  = computed(() => bookings.value.filter(b => b.date >= weekStart && b.date <= weekEnd).length)
-const checkedInCount = computed(() => bookings.value.filter(b => b.status === 'checkedin').length)
-const missedCount    = computed(() => bookings.value.filter(b => b.status === 'missed').length)
+const stats = ref({ todayCount: 0, weekCount: 0, totalCount: 0 })
 
 const tabs = computed(() => [
-  { value: 'today', label: '今日',   count: todayCount.value },
-  { value: 'week',  label: '本周',   count: weekCount.value },
-  { value: 'all',   label: '全部预约', count: bookings.value.length },
+  { value: 'today', label: '今日',    count: stats.value.todayCount },
+  { value: 'week',  label: '本周',    count: stats.value.weekCount },
+  { value: 'all',   label: '全部预约', count: stats.value.totalCount },
 ])
 
-const filteredBookings = computed(() => bookings.value.filter(b => {
-  if (activeTab.value === 'today' && b.date !== today) return false
-  if (activeTab.value === 'week'  && (b.date < weekStart || b.date > weekEnd)) return false
-  if (search.value && !b.studentName.includes(search.value) && !b.studentId.includes(search.value)) return false
-  if (statusFilter.value && b.status !== statusFilter.value) return false
-  if (dateFilter.value && activeTab.value === 'all' && b.date !== dateFilter.value) return false
-  return true
-}))
+async function loadBookings() {
+  try {
+    const data = await getBookings({
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      search: search.value,
+      status: statusFilter.value,
+      date: dateFilter.value,
+      tab: activeTab.value,
+    })
+    bookings.value = data.records || []
+    total.value = data.total || 0
+  } catch { bookings.value = [] }
+}
 
-watch([activeTab, search, statusFilter, dateFilter], () => { currentPage.value = 1 })
+async function loadStats() {
+  try { stats.value = await getBookingStats(activeTab.value) } catch {}
+}
 
-const pagedBookings = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredBookings.value.slice(start, start + pageSize.value)
-})
+watch([search, statusFilter, dateFilter], () => { currentPage.value = 1; loadBookings() })
+watch([currentPage, pageSize], loadBookings)
+
+onMounted(() => { loadBookings(); loadStats() })
 
 function switchTab(val) {
   activeTab.value = val
   if (val !== 'all') dateFilter.value = ''
+  currentPage.value = 1
+  loadBookings()
+  loadStats()
 }
 
 function statusText(s) {
@@ -170,14 +166,19 @@ function statusTagType(s) {
 async function cancelBooking(b) {
   try {
     await ElMessageBox.confirm(`确定取消 ${b.studentName} 的预约吗？`, '确认取消', { type: 'warning' })
-    b.status = 'cancelled'
+    await cancelBookingApi(b.id)
     ElMessage.success('预约已取消')
+    loadBookings()
+    loadStats()
   } catch {}
 }
 
 async function manualCheckIn(b) {
-  b.status = 'checkedin'
-  ElMessage.success('手动签到成功')
+  try {
+    await checkinBooking(b.id)
+    ElMessage.success('手动签到成功')
+    loadBookings()
+  } catch {}
 }
 
 </script>

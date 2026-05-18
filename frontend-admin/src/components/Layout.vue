@@ -115,18 +115,18 @@ function updateClock() {
 }
 
 let clockTimer
-onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000) })
+onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); auth.loadMe() })
 onUnmounted(() => clearInterval(clockTimer))
 
 const navItems = [
   { path: '/dashboard', label: '数据看板', icon: 'Odometer', perm: null },
-  { path: '/rooms', label: '自习室管理', icon: 'OfficeBuilding', perm: 'room.view' },
-  { path: '/bookings', label: '预约记录', icon: 'Calendar', perm: 'booking.view' },
-  { path: '/violations', label: '违约记录', icon: 'Warning', perm: 'violation.view' },
+  { path: '/rooms', label: '自习室管理', icon: 'OfficeBuilding', perm: 'room.read' },
+  { path: '/bookings', label: '预约记录', icon: 'Calendar', perm: 'reservation.read' },
+  { path: '/violations', label: '违约记录', icon: 'Warning', perm: 'violation.read' },
   { path: '/notices', label: '通知公告', icon: 'Bell', perm: null },
   { path: '/feedback', label: '问题反馈', icon: 'ChatDotRound', perm: null },
-  { path: '/users', label: '用户管理', icon: 'User', perm: 'user.view' },
-  { path: '/roles', label: '角色权限', icon: 'Lock', perm: 'role.manage' },
+  { path: '/users', label: '用户管理', icon: 'User', perm: 'user.read' },
+  { path: '/roles', label: '角色权限', icon: 'Lock', perm: 'user.assign_role' },
   { path: '/settings', label: '系统设置', icon: 'Setting', perm: 'settings.manage' },
 ]
 

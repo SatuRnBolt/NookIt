@@ -9,14 +9,14 @@ const routes = [
     children: [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', component: () => import('../views/Dashboard.vue') },
-      { path: 'rooms', component: () => import('../views/Rooms.vue'), meta: { perm: 'room.view' } },
-      { path: 'seats', component: () => import('../views/Seats.vue'), meta: { perm: 'seat.view' } },
-      { path: 'bookings', component: () => import('../views/Bookings.vue'), meta: { perm: 'booking.view' } },
-      { path: 'violations', component: () => import('../views/Violations.vue'), meta: { perm: 'violation.view' } },
+      { path: 'rooms', component: () => import('../views/Rooms.vue'), meta: { perm: 'room.read' } },
+      { path: 'seats', component: () => import('../views/Seats.vue'), meta: { perm: 'seat.read' } },
+      { path: 'bookings', component: () => import('../views/Bookings.vue'), meta: { perm: 'reservation.read' } },
+      { path: 'violations', component: () => import('../views/Violations.vue'), meta: { perm: 'violation.read' } },
       { path: 'notices', component: () => import('../views/Notices.vue') },
       { path: 'feedback', component: () => import('../views/Feedback.vue') },
-      { path: 'users', component: () => import('../views/Users.vue'), meta: { perm: 'user.view' } },
-      { path: 'roles', component: () => import('../views/Roles.vue'), meta: { perm: 'role.manage' } },
+      { path: 'users', component: () => import('../views/Users.vue'), meta: { perm: 'user.read' } },
+      { path: 'roles', component: () => import('../views/Roles.vue'), meta: { perm: 'user.assign_role' } },
       { path: 'settings', component: () => import('../views/Settings.vue'), meta: { perm: 'settings.manage' } },
     ],
   },
@@ -28,18 +28,11 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to) => {
   const auth = useAdminAuthStore()
   auth.checkAuth()
-  if (!to.meta.public && !auth.isLoggedIn) {
-    next('/login')
-    return
-  }
-  if (to.meta.perm && !auth.hasPermission(to.meta.perm)) {
-    next('/dashboard')
-    return
-  }
-  next()
+  if (!to.meta.public && !auth.isLoggedIn) return '/login'
+  if (to.meta.perm && !auth.hasPermission(to.meta.perm)) return '/dashboard'
 })
 
 export default router

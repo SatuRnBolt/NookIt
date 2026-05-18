@@ -147,7 +147,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="filteredRooms.length"
+          :total="roomsTotal"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
           background
@@ -577,14 +577,11 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockRooms } from '../mock/data'
+import { getRooms, createRoom, updateRoom, deleteRoom as deleteRoomApi, updateRoomStatus, getSeatMap } from '../api/rooms'
 
-const rooms = ref([...mockRooms.map((room) => ({
-  ...room,
-  room_status: room.room_status === 'draft' || room.room_status === 'closed' ? 'inactive' : room.room_status,
-}))])
+const rooms = ref([])
 
 const search = ref('')
 const campusFilter = ref('')
@@ -609,27 +606,35 @@ const roomTypeOptions = ['普通自习室', '大型自习室', '机构专属自�
 const form = reactive(defaultForm())
 const seatForm = reactive(defaultSeatForm())
 const mapForm = reactive(defaultMapForm())
-const seatMapsByRoom = reactive(createSeatMapsForRooms(rooms.value))
+const seatMapsByRoom = reactive({})
+const roomsTotal = ref(0)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-const filteredRooms = computed(() => rooms.value.filter((room) => {
-  if (search.value && !room.room_code.includes(search.value) && !room.room_name.includes(search.value)) return false
-  if (campusFilter.value && room.campus !== campusFilter.value) return false
-  if (visibilityFilter.value && room.visibility_scope !== visibilityFilter.value) return false
-  return true
-}))
+async function loadRooms() {
+  try {
+    const data = await getRooms({
+      page: currentPage.value, pageSize: pageSize.value,
+      search: search.value, campus: campusFilter.value,
+      visibilityScope: visibilityFilter.value,
+    })
+    rooms.value = data.records || []
+    roomsTotal.value = data.total || 0
+  } catch { rooms.value = [] }
+}
 
-watch([search, campusFilter, visibilityFilter], () => { currentPage.value = 1 })
+onMounted(loadRooms)
 
-const pagedRooms = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredRooms.value.slice(start, start + pageSize.value)
-})
+const filteredRooms = computed(() => rooms.value)
+
+watch([search, campusFilter, visibilityFilter], () => { currentPage.value = 1; loadRooms() })
+watch([currentPage, pageSize], loadRooms)
+
+const pagedRooms = computed(() => filteredRooms.value)
 
 const stats = computed(() => ({
-  total: rooms.value.length,
+  total: roomsTotal.value,
   active: rooms.value.filter(r => r.room_status === 'active').length,
   capacity: rooms.value.reduce((sum, r) => sum + (r.total_capacity || 0), 0),
   inactive: rooms.value.filter(r => r.room_status !== 'active').length,
@@ -796,8 +801,11 @@ function seatStatusType(value) {
   return { active: 'success', inactive: 'info', maintenance: 'warning' }[value] ?? 'info'
 }
 
-function onStatusChange(room) {
-  ElMessage.success(`《${room.room_name}》已${room.room_status === 'active' ? '启用' : '停用'}`)
+async function onStatusChange(room) {
+  try {
+    await updateRoomStatus(room.id, room.room_status)
+    ElMessage.success(`《${room.room_name}》已${room.room_status === 'active' ? '启用' : '停用'}`)
+  } catch { loadRooms() }
 }
 
 function openDialog(room = null) {
@@ -806,39 +814,57 @@ function openDialog(room = null) {
   dialogVisible.value = true
 }
 
-function saveRoom() {
+async function saveRoom() {
   if (!form.room_code || !form.room_name || !form.building) {
     ElMessage.warning('请填写房间编码、名称和楼栋')
     return
   }
-
-  if (editingRoom.value) {
-    Object.assign(editingRoom.value, { ...form })
-    ElMessage.success('自习室信息已更新')
-  } else {
-    const newRoom = { id: Date.now(), ...form, created_at: new Date().toISOString().slice(0, 10) }
-    rooms.value.push(newRoom)
-    seatMapsByRoom[newRoom.id] = buildMockSeatMap(newRoom, rooms.value.length)
-    ElMessage.success('自习室已创建')
-  }
-
-  dialogVisible.value = false
+  try {
+    if (editingRoom.value) {
+      await updateRoom(editingRoom.value.id, form)
+      ElMessage.success('自习室信息已更新')
+    } else {
+      await createRoom(form)
+      ElMessage.success('自习室已创建')
+    }
+    dialogVisible.value = false
+    loadRooms()
+  } catch {}
 }
 
-function viewSeatMap(room) {
-  if (!seatMapsByRoom[room.id]) {
-    seatMapsByRoom[room.id] = buildMockSeatMap(room, rooms.value.findIndex((item) => item.id === room.id))
-  }
+async function viewSeatMap(room) {
   currentRoom.value = room
-  currentSeatMap.value = seatMapsByRoom[room.id]
+  currentSeatMap.value = null
   layoutMode.value = 'view'
   addSeatMode.value = false
   selectedSeat.value = null
   seatStatusFilter.value = ''
   onlyBookable.value = false
   Object.assign(seatForm, defaultSeatForm())
-  syncMapForm()
   seatMapVisible.value = true
+  try {
+    const map = await getSeatMap(room.id)
+    if (map) {
+      seatMapsByRoom[room.id] = map
+      currentSeatMap.value = map
+      syncMapForm()
+    } else if (seatMapsByRoom[room.id]) {
+      currentSeatMap.value = seatMapsByRoom[room.id]
+      syncMapForm()
+    } else {
+      const mockMap = buildMockSeatMap(room, 0)
+      seatMapsByRoom[room.id] = mockMap
+      currentSeatMap.value = mockMap
+      syncMapForm()
+    }
+  } catch {
+    if (!seatMapsByRoom[room.id]) {
+      const mockMap = buildMockSeatMap(room, 0)
+      seatMapsByRoom[room.id] = mockMap
+    }
+    currentSeatMap.value = seatMapsByRoom[room.id]
+    syncMapForm()
+  }
 }
 
 function syncMapForm() {
@@ -1042,9 +1068,10 @@ function markMapDraft() {
 async function deleteRoom(room) {
   try {
     await ElMessageBox.confirm(`确定要删除《${room.room_name}》吗？`, '删除确认', { type: 'warning' })
-    rooms.value = rooms.value.filter((item) => item.id !== room.id)
+    await deleteRoomApi(room.id)
     delete seatMapsByRoom[room.id]
     ElMessage.success('自习室已删除')
+    loadRooms()
   } catch {}
 }
 </script>

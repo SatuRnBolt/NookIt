@@ -96,12 +96,12 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockRoles, PERMISSIONS } from '../mock/data'
+import { getRoles, createRole, updateRole, deleteRole as deleteRoleApi, savePermissions as savePermsApi, getAllPermissions } from '../api/roles'
 
-const roles = ref(JSON.parse(JSON.stringify(mockRoles)))
-const allPermissions = PERMISSIONS
+const roles = ref([])
+const allPermissions = ref([])
 const selectedRoleId = ref(null)
 const roleDialog = ref(false)
 const editingRole = ref(null)
@@ -112,63 +112,64 @@ const roleForm = reactive({ name: '', description: '' })
 const selectedRole = computed(() => roles.value.find(r => r.id === selectedRoleId.value))
 
 watch(selectedRole, (role) => {
-  editingPerms.value = role ? [...role.permissions] : []
+  editingPerms.value = role ? [...(role.permissions || [])] : []
 }, { immediate: true })
+
+async function loadRoles() {
+  try {
+    const [roleList, perms] = await Promise.all([getRoles(), getAllPermissions()])
+    roles.value = roleList || []
+    allPermissions.value = perms || []
+    if (!selectedRoleId.value && roles.value.length) selectedRoleId.value = roles.value[0].id
+  } catch {}
+}
+
+onMounted(loadRoles)
 
 function togglePerm(key) {
   const i = editingPerms.value.indexOf(key)
-  if (i >= 0) {
-    editingPerms.value.splice(i, 1)
-  } else {
-    editingPerms.value.push(key)
-  }
+  if (i >= 0) editingPerms.value.splice(i, 1)
+  else editingPerms.value.push(key)
 }
 
-function savePermissions() {
-  if (selectedRole.value) {
+async function savePermissions() {
+  if (!selectedRole.value) return
+  try {
+    await savePermsApi(selectedRole.value.id, editingPerms.value)
     selectedRole.value.permissions = [...editingPerms.value]
     ElMessage.success('权限配置已保存')
-  }
+  } catch {}
 }
 
 function openRoleDialog(role = null) {
   editingRole.value = role
-  if (role) {
-    Object.assign(roleForm, role)
-  } else {
-    Object.assign(roleForm, { name: '', description: '' })
-  }
+  Object.assign(roleForm, role ? { name: role.name, description: role.description } : { name: '', description: '' })
   roleDialog.value = true
 }
 
-function saveRole() {
-  if (!roleForm.name) {
-    ElMessage.warning('请填写角色名称')
-    return
-  }
-  if (editingRole.value) {
-    Object.assign(editingRole.value, { name: roleForm.name, description: roleForm.description })
-    ElMessage.success('角色已更新')
-  } else {
-    roles.value.push({
-      id: Date.now(), name: roleForm.name, description: roleForm.description,
-      permissions: [], userCount: 0
-    })
-    ElMessage.success('角色已创建')
-  }
-  roleDialog.value = false
+async function saveRole() {
+  if (!roleForm.name) { ElMessage.warning('请填写角色名称'); return }
+  try {
+    if (editingRole.value) {
+      await updateRole(editingRole.value.id, { name: roleForm.name, description: roleForm.description })
+      ElMessage.success('角色已更新')
+    } else {
+      await createRole({ name: roleForm.name, description: roleForm.description })
+      ElMessage.success('角色已创建')
+    }
+    roleDialog.value = false
+    loadRoles()
+  } catch {}
 }
 
 async function deleteRole(role) {
-  if (role.userCount > 0) {
-    ElMessage.warning('该角色下还有用户，无法删除')
-    return
-  }
+  if (role.userCount > 0) { ElMessage.warning('该角色下还有用户，无法删除'); return }
   try {
     await ElMessageBox.confirm(`确定删除角色"${role.name}"吗？`, '删除确认', { type: 'warning' })
-    roles.value = roles.value.filter(r => r.id !== role.id)
+    await deleteRoleApi(role.id)
     if (selectedRoleId.value === role.id) selectedRoleId.value = null
     ElMessage.success('角色已删除')
+    loadRoles()
   } catch {}
 }
 </script>
