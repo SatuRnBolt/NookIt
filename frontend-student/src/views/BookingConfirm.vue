@@ -101,6 +101,10 @@ const submitting = ref(false)
 const maxHours = 4
 const totalSlots = 15 // 07:00-21:00
 
+function slotLabel(slot) {
+  return `${String(slot + 6).padStart(2, '0')}:00`
+}
+
 function disabledDate(date) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -173,8 +177,8 @@ async function handleSubmit() {
     await createReservation({
       seatId: Number(seatId),
       date: selectedDate.value,
-      startHour: startSlot.value + 6,
-      endHour: endSlot.value + 7,
+      startTime: slotLabel(startSlot.value),
+      endTime: slotLabel(endSlot.value + 1),
     })
     ElMessage.success('预约成功！')
     router.push('/reservations')

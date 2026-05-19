@@ -16,8 +16,8 @@ public class BookingVO {
     private String roomName;
     private String seatNo;
     private LocalDate date;
-    private Integer startHour;
-    private Integer endHour;
+    private String startTime;
+    private String endTime;
     private String status;
     private LocalDateTime createdAt;
 }

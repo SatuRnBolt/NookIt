@@ -12,8 +12,8 @@
             COALESCE(sr.display_name, sr.room_name) AS roomName,
             s.seat_code AS seatNo,
             r.reservation_date AS date,
-            r.start_hour AS startHour,
-            r.end_hour AS endHour,
+            DATE_FORMAT(r.start_at, '%H:%i') AS startTime,
+            DATE_FORMAT(r.end_at, '%H:%i') AS endTime,
             r.reservation_status AS status,
             r.created_at AS createdAt
         FROM reservations r

@@ -68,7 +68,7 @@
         <el-table-column prop="date" label="日期" width="112" />
         <el-table-column label="时间段" width="144">
           <template #default="{ row }">
-            {{ String(row.startHour).padStart(2,'0') }}:00 – {{ String(row.endHour).padStart(2,'0') }}:00
+            {{ row.startTime || '-' }} – {{ row.endTime || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="96" align="center">

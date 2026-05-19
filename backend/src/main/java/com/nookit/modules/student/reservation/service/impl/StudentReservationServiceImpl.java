@@ -125,9 +125,6 @@ public class StudentReservationServiceImpl implements StudentReservationService 
         r.setReservationDate(date);
         r.setStartAt(reqStart);
         r.setEndAt(reqEnd);
-        r.setStartHour(startLocalTime.getHour());
-        r.setEndHour(endLocalTime.getHour());
-        r.setDurationHours((int) (durationMinutes / 60));
         r.setReservationStatus("pending_checkin");
         r.setSourceChannel("web");
         r.setNotesText(String.format("%04d", new Random().nextInt(10000)));

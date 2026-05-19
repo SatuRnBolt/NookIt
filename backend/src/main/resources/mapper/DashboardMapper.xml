@@ -40,13 +40,13 @@
     <select id="queryHeatmapData" resultType="map">
         SELECT
             DATE_FORMAT(r.reservation_date, '%W') AS day,
-            r.start_hour AS hour,
+            HOUR(r.start_at) AS hour,
             COUNT(*) AS value
         FROM reservations r
         WHERE r.reservation_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND CURDATE()
           AND r.deleted_at IS NULL
-        GROUP BY r.reservation_date, r.start_hour
-        ORDER BY r.reservation_date, r.start_hour
+        GROUP BY r.reservation_date, HOUR(r.start_at)
+        ORDER BY r.reservation_date, HOUR(r.start_at)
     </select>
 
     <select id="queryTodos" resultType="map">
