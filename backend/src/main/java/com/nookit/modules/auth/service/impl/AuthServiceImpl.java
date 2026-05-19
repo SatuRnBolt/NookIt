@@ -2,11 +2,11 @@ package com.nookit.modules.auth.service.impl;
 
 import com.nookit.common.api.ResultCode;
 import com.nookit.common.constant.SecurityConstants;
-import com.nookit.common.exception.AuthException;
 import com.nookit.common.exception.BusinessException;
 import com.nookit.common.util.JwtUtil;
 import com.nookit.modules.auth.dto.LoginRequest;
 import com.nookit.modules.auth.dto.LoginResponse;
+import com.nookit.modules.auth.dto.UpdateSignatureReq;
 import com.nookit.modules.auth.dto.UserInfoVO;
 import com.nookit.modules.auth.mapper.AuthMapper;
 import com.nookit.modules.auth.service.AuthService;
@@ -67,6 +67,7 @@ public class AuthServiceImpl implements AuthService {
         userInfo.setUserType(userType);
         userInfo.setRoles(roles);
         userInfo.setPermissions(permissions);
+        fillProfile(userInfo, authMapper.findUserProfileById(userId));
 
         LoginResponse resp = new LoginResponse();
         resp.setToken(token);
@@ -82,19 +83,31 @@ public class AuthServiceImpl implements AuthService {
         vo.setUserType(principal.getUserType());
         vo.setRoles(List.copyOf(principal.getRoles()));
         vo.setPermissions(List.copyOf(principal.getPermissions()));
-
-        // JWT 里没有存完整用户信息，查 DB 补全
-        Map<String, Object> profile = authMapper.findUserProfileById(principal.getUserId());
-        if (profile != null) {
-            vo.setName((String) profile.get("name"));
-            vo.setNickname((String) profile.get("nickname"));
-            vo.setAvatarUrl((String) profile.get("avatarUrl"));
-            vo.setPhone((String) profile.get("phone"));
-            vo.setStudentNo((String) profile.get("studentNo"));
-            Number vc = (Number) profile.get("violationCount");
-            vo.setViolationCount(vc != null ? vc.intValue() : 0);
-        }
-
+        fillProfile(vo, authMapper.findUserProfileById(principal.getUserId()));
         return vo;
+    }
+
+    @Override
+    public UserInfoVO updateSignature(UserPrincipal principal, UpdateSignatureReq request) {
+        authMapper.updateUserSignature(principal.getUserId(), normalizeSignature(request.getSignature()));
+        return me(principal);
+    }
+
+    private void fillProfile(UserInfoVO vo, Map<String, Object> profile) {
+        if (profile == null) return;
+        vo.setName((String) profile.get("name"));
+        vo.setNickname((String) profile.get("nickname"));
+        vo.setSignature((String) profile.get("signature"));
+        vo.setAvatarUrl((String) profile.get("avatarUrl"));
+        vo.setPhone((String) profile.get("phone"));
+        vo.setStudentNo((String) profile.get("studentNo"));
+        Number vc = (Number) profile.get("violationCount");
+        vo.setViolationCount(vc != null ? vc.intValue() : 0);
+    }
+
+    private String normalizeSignature(String signature) {
+        if (signature == null) return null;
+        String normalized = signature.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

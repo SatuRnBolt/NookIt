@@ -50,6 +50,7 @@
         SELECT
             u.full_name       AS name,
             u.nickname,
+            u.signature,
             u.avatar_url      AS avatarUrl,
             u.phone,
             u.student_no      AS studentNo,
@@ -58,5 +59,12 @@
         WHERE u.id = #{userId}
           AND u.deleted_at IS NULL
     </select>
+
+    <update id="updateUserSignature">
+        UPDATE users
+        SET signature = #{signature}
+        WHERE id = #{userId}
+          AND deleted_at IS NULL
+    </update>
 
 </mapper>

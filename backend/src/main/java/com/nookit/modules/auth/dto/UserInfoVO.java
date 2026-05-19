@@ -18,6 +18,9 @@ public class UserInfoVO {
     @Schema(description = "昵称")
     private String nickname;
 
+    @Schema(description = "个性签名")
+    private String signature;
+
     @Schema(description = "邮箱")
     private String email;
 

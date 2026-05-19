@@ -1,6 +1,5 @@
 package com.nookit.modules.auth.mapper;
 
-import com.nookit.modules.auth.dto.UserInfoVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -24,4 +23,7 @@ public interface AuthMapper {
 
     /** 根据用户 ID 查询完整个人信息 */
     Map<String, Object> findUserProfileById(@Param("userId") Long userId);
+
+    /** 更新用户个性签名 */
+    int updateUserSignature(@Param("userId") Long userId, @Param("signature") String signature);
 }

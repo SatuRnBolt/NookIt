@@ -4,6 +4,7 @@ import com.nookit.common.annotation.CurrentUser;
 import com.nookit.common.api.Result;
 import com.nookit.modules.auth.dto.LoginRequest;
 import com.nookit.modules.auth.dto.LoginResponse;
+import com.nookit.modules.auth.dto.UpdateSignatureReq;
 import com.nookit.modules.auth.dto.UserInfoVO;
 import com.nookit.modules.auth.service.AuthService;
 import com.nookit.security.UserPrincipal;
@@ -38,5 +39,12 @@ public class AuthController {
     @Operation(summary = "获取当前登录用户信息")
     public Result<UserInfoVO> me(@CurrentUser UserPrincipal principal) {
         return Result.success(authService.me(principal));
+    }
+
+    @PutMapping("/me/signature")
+    @Operation(summary = "更新当前登录用户个性签名")
+    public Result<UserInfoVO> updateSignature(@CurrentUser UserPrincipal principal,
+                                              @Valid @RequestBody UpdateSignatureReq request) {
+        return Result.success(authService.updateSignature(principal, request));
     }
 }

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { login as loginApi, logout as logoutApi, getMe } from '../api/auth'
+import { login as loginApi, logout as logoutApi, getMe, updateMySignature } from '../api/auth'
 
 export const useStudentAuthStore = defineStore('studentAuth', () => {
   const user = ref(null)
@@ -39,5 +39,12 @@ export const useStudentAuthStore = defineStore('studentAuth', () => {
     }
   }
 
-  return { user, isLoggedIn, login, logout, checkAuth }
+  async function saveSignature(signature) {
+    const updatedUser = await updateMySignature(signature)
+    user.value = updatedUser
+    isLoggedIn.value = true
+    return updatedUser
+  }
+
+  return { user, isLoggedIn, login, logout, checkAuth, saveSignature }
 })

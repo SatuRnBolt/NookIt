@@ -35,23 +35,30 @@
           </button>
         </div>
         <div class="hero-right">
-          <div class="stats-card">
-            <div class="stats-item">
-              <span class="stats-dot dot-orange"></span>
-              <span class="stats-num">{{ pendingCount }}</span>
-              <span class="stats-label">待处理预约</span>
+          <div class="hero-side-stack">
+            <div class="stats-card">
+              <div class="stats-item">
+                <span class="stats-dot dot-orange"></span>
+                <span class="stats-num">{{ pendingCount }}</span>
+                <span class="stats-label">待处理预约</span>
+              </div>
+              <div class="stats-sep"></div>
+              <div class="stats-item">
+                <span class="stats-dot dot-blue"></span>
+                <span class="stats-num">{{ todayCount }}</span>
+                <span class="stats-label">今日预约</span>
+              </div>
+              <div class="stats-sep"></div>
+              <div class="stats-item">
+                <span class="stats-dot dot-green"></span>
+                <span class="stats-num">{{ availableRooms }}</span>
+                <span class="stats-label">可用自习室</span>
+              </div>
             </div>
-            <div class="stats-sep"></div>
-            <div class="stats-item">
-              <span class="stats-dot dot-blue"></span>
-              <span class="stats-num">{{ todayCount }}</span>
-              <span class="stats-label">今日预约</span>
-            </div>
-            <div class="stats-sep"></div>
-            <div class="stats-item">
-              <span class="stats-dot dot-green"></span>
-              <span class="stats-num">{{ availableRooms }}</span>
-              <span class="stats-label">可用自习室</span>
+
+            <div class="signature-card">
+              <div class="signature-card-label">个性签名</div>
+              <div class="signature-card-text">{{ auth.user?.signature || defaultSignature }}</div>
             </div>
           </div>
         </div>
@@ -234,6 +241,7 @@ const heroBgStyle = computed(() => {
 
 const router = useRouter()
 const auth = useStudentAuthStore()
+const defaultSignature = '保持专注，今天也认真学习。'
 
 const rooms = ref([])
 const myBookings = ref([])
@@ -530,6 +538,12 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+.hero-side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .stats-card {
   display: flex;
   align-items: center;
@@ -580,6 +594,29 @@ onMounted(async () => {
   height: 44px;
   background: #eef0f6;
   flex-shrink: 0;
+}
+
+.signature-card {
+  min-width: 380px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.94);
+  border: 1px solid rgba(255,255,255,0.78);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  backdrop-filter: blur(8px);
+}
+
+.signature-card-label {
+  font-size: 12px;
+  color: #7d8aa0;
+  margin-bottom: 8px;
+}
+
+.signature-card-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1a202c;
+  font-weight: 600;
 }
 
 /* ── Panels ── */
@@ -1034,6 +1071,11 @@ onMounted(async () => {
   }
 
   .stats-card {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .signature-card {
     min-width: unset;
     width: 100%;
   }
