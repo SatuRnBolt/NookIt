@@ -105,7 +105,7 @@
           v-for="sug in aiSuggestions"
           :key="sug"
           class="ai-sug-chip"
-          @click="aiQuestion = sug"
+          @click="goAiChatWith(sug)"
         >{{ sug }}</span>
       </div>
     </div>
@@ -247,13 +247,17 @@ const rooms = ref([])
 const myBookings = ref([])
 const search = ref('')
 const aiQuestion = ref('')
-const aiSuggestions = ['帮我查可用座位', '分析我的预约状态', '信用积分还够吗', '协助违规申诉']
+const aiSuggestions = ['帮我查可用座位', '分析我的预约状态', '查询违规情况', '协助违规申诉']
 
 function goAiChat() {
   router.push(aiQuestion.value.trim()
     ? { path: '/ai-chat', query: { q: aiQuestion.value.trim() } }
     : '/ai-chat'
   )
+}
+
+function goAiChatWith(text) {
+  router.push({ path: '/ai-chat', query: { q: text } })
 }
 const loading = ref(false)
 const activeCampus = ref('all')

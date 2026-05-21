@@ -10,13 +10,17 @@
       </div>
       <div class="conv-list">
         <div
+          v-if="conversations.length === 0 && !convLoading"
+          class="conv-empty"
+        >还没有历史对话</div>
+        <div
           v-for="conv in conversations"
           :key="conv.id"
           :class="['conv-item', { 'conv-active': conv.id === activeConvId }]"
           @click="switchConversation(conv.id)"
         >
-          <div class="conv-item-title">{{ conv.title }}</div>
-          <div class="conv-item-time">{{ conv.time }}</div>
+          <div class="conv-item-title">{{ conv.title || '新对话' }}</div>
+          <div class="conv-item-time">{{ conv.timeLabel }}</div>
         </div>
       </div>
     </div>
@@ -43,32 +47,96 @@
             <div class="chat-header-sub">智能操作 · 信息查询 · 违规申诉 · 预约助手</div>
           </div>
         </div>
-        <button class="chat-clear-btn" @click="clearMessages">清空对话</button>
+      </div>
+
+      <div
+        v-if="activityVisible"
+        :class="['chat-activity-bar', `chat-activity-${activityState}`]"
+      >
+        <span
+          v-if="activityState === 'thinking' || activityState === 'tool' || activityState === 'streaming'"
+          class="activity-spinner"
+        ></span>
+        <span v-else class="activity-dot"></span>
+        <span class="activity-text">{{ activityText }}</span>
       </div>
 
       <!-- Messages -->
       <div class="chat-messages" ref="messagesEl">
-        <div
-          v-for="msg in messages"
-          :key="msg.id"
-          :class="['chat-msg', msg.role === 'user' ? 'chat-msg-user' : 'chat-msg-ai']"
-        >
-          <div v-if="msg.role === 'ai'" class="chat-bubble-avatar ai-avatar">
-            <MagicStick style="width:14px;height:14px;color:#fff" />
+        <template v-for="msg in messages" :key="msg.id">
+          <!-- pending confirm card -->
+          <div v-if="msg.role === 'pending'" class="chat-msg chat-msg-ai">
+            <div class="chat-bubble-avatar ai-avatar">
+              <el-icon :size="14" color="#f59e0b"><Warning /></el-icon>
+            </div>
+            <div class="pending-card" :class="`pending-${msg.pending.status}`">
+              <div class="pending-header">
+                <el-icon :size="14"><Warning /></el-icon>
+                <span>{{ pendingHeaderText(msg.pending) }}</span>
+              </div>
+              <div v-if="pendingPrimaryInfo(msg.pending)" class="pending-primary">
+                <div v-if="pendingPrimaryInfo(msg.pending).eyebrow" class="pending-primary-eyebrow">
+                  {{ pendingPrimaryInfo(msg.pending).eyebrow }}
+                </div>
+                <div class="pending-primary-title">{{ pendingPrimaryInfo(msg.pending).title }}</div>
+                <div v-if="pendingPrimaryInfo(msg.pending).meta" class="pending-primary-meta">
+                  {{ pendingPrimaryInfo(msg.pending).meta }}
+                </div>
+              </div>
+              <div v-if="pendingSecondaryEntries(msg.pending).length" class="pending-detail-list">
+                <div
+                  v-for="item in pendingSecondaryEntries(msg.pending)"
+                  :key="item.label"
+                  class="pending-detail-row"
+                >
+                  <span class="pending-detail-label">{{ item.label }}</span>
+                  <span class="pending-detail-value">{{ item.value }}</span>
+                </div>
+              </div>
+              <div v-if="msg.pending.status === 'pending'" class="pending-actions">
+                <el-button size="small" plain :disabled="loading || pendingActionBusyId === msg.pending.action_id" @click="cancelAction(msg)">取消</el-button>
+                <el-button size="small" type="primary" :disabled="loading || pendingActionBusyId === msg.pending.action_id" @click="confirmAction(msg)">确认执行</el-button>
+              </div>
+              <div v-else-if="msg.pending.status === 'confirmed'" class="pending-status-tag pending-status-ok">
+                ✓ 已执行
+              </div>
+              <div v-else-if="msg.pending.status === 'failed'" class="pending-status-tag pending-status-failed">
+                执行失败
+              </div>
+              <div v-else class="pending-status-tag pending-status-cancel">
+                已取消
+              </div>
+            </div>
           </div>
 
-          <div :class="['chat-bubble', msg.role === 'user' ? 'bubble-user' : 'bubble-ai']">
-            <div class="bubble-text">{{ msg.content }}</div>
-            <div class="bubble-time">{{ msg.time }}</div>
-          </div>
+          <!-- normal user/assistant message -->
+          <div
+            v-else
+            :class="['chat-msg', msg.role === 'user' ? 'chat-msg-user' : 'chat-msg-ai']"
+          >
+            <div v-if="msg.role === 'assistant'" class="chat-bubble-avatar ai-avatar">
+              <MagicStick style="width:14px;height:14px;color:var(--nt-primary)" />
+            </div>
 
-          <div v-if="msg.role === 'user'" class="chat-bubble-avatar user-avatar">
-            <img :src="auth.user?.avatarUrl || defaultAvatar" class="bubble-avatar-img" />
-          </div>
-        </div>
+            <div :class="['chat-bubble', msg.role === 'user' ? 'bubble-user' : 'bubble-ai']">
+              <div v-if="msg.toolHint" class="bubble-tool-hint">{{ msg.toolHint }}</div>
+              <div v-if="msg.role === 'assistant'" class="bubble-text bubble-md">
+                <div class="md-body" v-html="renderMarkdown(msg.content)"></div><span v-if="msg.streaming" class="cursor-blink">▍</span>
+              </div>
+              <div v-else class="bubble-text">
+                {{ msg.content }}
+              </div>
+              <div v-if="msg.time" class="bubble-time">{{ msg.time }}</div>
+            </div>
 
-        <!-- Typing indicator -->
-        <div v-if="loading" class="chat-msg chat-msg-ai">
+            <div v-if="msg.role === 'user'" class="chat-bubble-avatar user-avatar">
+              <img :src="auth.user?.avatarUrl || defaultAvatar" class="bubble-avatar-img" />
+            </div>
+          </div>
+        </template>
+
+        <!-- thinking indicator: only before the first token arrives -->
+        <div v-if="loading && !hasStreamingAssistant" class="chat-msg chat-msg-ai">
           <div class="chat-bubble-avatar ai-avatar">
             <img src="../assets/deepseek-color.svg" style="width:18px;height:18px;" />
           </div>
@@ -93,15 +161,19 @@
             @keyup.enter="sendMessage"
           />
           <el-button
+            v-if="loading"
+            size="large"
+            class="chat-send-btn"
+            @click="abortStream"
+          >停止</el-button>
+          <el-button
+            v-else
             type="primary"
             size="large"
-            :disabled="!inputText.trim() || loading"
-            :loading="loading"
+            :disabled="!inputText.trim()"
             class="chat-send-btn"
             @click="sendMessage"
-          >
-            发送
-          </el-button>
+          >发送</el-button>
         </div>
         <div class="chat-input-tip">Enter 发送 · 本智能体仅供学习参考</div>
       </div>
@@ -110,11 +182,23 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { ArrowLeft, Plus, MagicStick, Warning } from '@element-plus/icons-vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useStudentAuthStore } from '../stores/auth'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { cancelPendingAction, chatStream, getConversations, getMessages } from '../api/ai'
+import { getSeatDetail } from '../api/rooms'
 import defaultAvatar from '../assets/stu-default-icon.png'
+
+marked.setOptions({ breaks: true, gfm: true })
+
+function renderMarkdown(text) {
+  if (!text) return ''
+  return DOMPurify.sanitize(marked.parse(text))
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -123,41 +207,362 @@ const auth = useStudentAuthStore()
 const messagesEl = ref(null)
 const inputText = ref('')
 const loading = ref(false)
-const activeConvId = ref(0)
+const convLoading = ref(false)
+const activityState = ref('idle')
+const activityText = ref('')
 
-const conversations = ref([
-  { id: 0, title: '当前对话', time: '刚刚' },
-  { id: 1, title: '如何预约图书馆座位', time: '今天 14:30' },
-  { id: 2, title: '信用分扣除原因查询', time: '今天 10:15' },
-  { id: 3, title: '预约取消规则说明', time: '昨天 16:20' },
-  { id: 4, title: '违规申诉流程', time: '5月13日' },
-])
+const conversations = ref([])
+const activeConvId = ref(null)  // null = brand-new (not yet persisted)
+const messages = ref([welcomeMsg()])
+const pendingSeatDetails = reactive({})
+const pendingSeatDetailLoading = reactive({})
+const pendingActionBusyId = ref(null)
 
-function makeWelcomeMsg() {
-  return {
-    id: 0,
-    role: 'ai',
-    content: '你好！我是 Nookit 校园智能体，不只是答题助手——我能帮你完成预约操作、查询座位状态、分析信用情况、指导违规申诉，以及解答各类校园自习室问题。\n\n有什么想完成的任务，直接告诉我吧！',
-    time: formatTime(new Date()),
-  }
+let msgSeq = 0
+const nextId = () => `m-${++msgSeq}`
+
+let abortController = null
+
+function createMessage(message) {
+  return reactive(message)
 }
 
-const messages = ref([makeWelcomeMsg()])
+function setActivity(state, text) {
+  activityState.value = state
+  activityText.value = text
+}
 
-const mockReplies = [
-  '每位同学每天最多可预约 2 个时段的自习室座位，单次预约时长不超过 4 小时。',
-  '您可以在"我的预约"页面查看当前预约状态，包括待确认、已确认和已完成的记录。',
-  '如需取消预约，请在预约开始时间 30 分钟前操作，逾期取消将扣除 5 分信用积分。',
-  '自习室一般在工作日 8:00–22:00 开放，节假日开放时间请关注通知公告。',
-  '信用积分低于 60 分时将暂时无法发起预约。如认为扣分有误，可在"我的违规"页面发起申诉，审核周期为 3 个工作日。',
-  '预约成功后请准时入座。超过 15 分钟未入座，系统将自动取消本次预约并扣除信用积分 10 分。',
-  '您好，这个问题我暂时还在学习中。您可以前往"问题反馈"页面提交详细问题，工作人员会尽快为您解答。',
-]
+function clearActivity() {
+  activityState.value = 'idle'
+  activityText.value = ''
+}
 
-let replyIdx = 0
+// Typewriter buffer: smooths bursty upstream into per-character drip.
+// Per-message state: { pending: '', timer: number|null, done: boolean }.
+const typewriterState = new Map()
+const TYPE_INTERVAL_MS = 18
+
+function pushTokens(msg, text) {
+  if (!text) return
+  let state = typewriterState.get(msg.id)
+  if (!state) {
+    state = { pending: '', timer: null, done: false }
+    typewriterState.set(msg.id, state)
+  }
+  state.pending += text
+  ensureTypewriter(msg, state)
+}
+
+function ensureTypewriter(msg, state) {
+  if (state.timer != null) return
+  state.timer = window.setInterval(() => {
+    if (state.pending.length === 0) {
+      if (state.done) {
+        window.clearInterval(state.timer)
+        state.timer = null
+        typewriterState.delete(msg.id)
+      }
+      return
+    }
+    // Burst-adaptive chunk size: drain faster when buffer is big so we never
+    // fall too far behind, but still slow enough to feel like typing.
+    const take = Math.max(1, Math.ceil(state.pending.length / 24))
+    msg.content += state.pending.slice(0, take)
+    state.pending = state.pending.slice(take)
+    scrollToBottom()
+  }, TYPE_INTERVAL_MS)
+}
+
+function finishTypewriter(msg) {
+  const state = typewriterState.get(msg.id)
+  if (!state) return
+  state.done = true
+  // If buffer already empty, ensureTypewriter's tick will clear the timer.
+}
+
+function flushTypewriter(msg) {
+  // Force-drain everything immediately (e.g. on abort or unmount).
+  const state = typewriterState.get(msg.id)
+  if (!state) return
+  if (state.pending) {
+    msg.content += state.pending
+    state.pending = ''
+  }
+  if (state.timer != null) {
+    window.clearInterval(state.timer)
+    state.timer = null
+  }
+  typewriterState.delete(msg.id)
+}
+
+const hasStreamingAssistant = computed(() =>
+  messages.value.some(m => m.role === 'assistant' && m.streaming)
+)
+
+const activityVisible = computed(() => activityState.value !== 'idle' && !!activityText.value)
+
+function welcomeMsg() {
+  return createMessage({
+    id: 'welcome',
+    role: 'assistant',
+    content: '你好！我是 Nookit 校园智能体。我能帮你查询自习室和座位、协助预约和取消、查看违规和申诉，以及解答各类自习室相关的问题。\n\n有什么想完成的任务，直接告诉我吧。',
+    time: formatTime(new Date()),
+  })
+}
 
 function formatTime(d) {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function parseApiDateTime(value) {
+  if (!value) return null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+
+  const text = String(value).trim().replace(' ', 'T')
+  const naiveMatch = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/
+  )
+  if (naiveMatch) {
+    const [, year, month, day, hour, minute, second = '0', millis = '0'] = naiveMatch
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+      Number(millis.padEnd(3, '0'))
+    )
+  }
+
+  const parsed = new Date(text)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function formatApiTime(value) {
+  const d = parseApiDateTime(value)
+  return d ? formatTime(d) : ''
+}
+
+function formatConvTime(iso) {
+  if (!iso) return ''
+  const d = parseApiDateTime(iso)
+  if (!d) return ''
+  const now = new Date()
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) return `今天 ${formatTime(d)}`
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate()
+  if (isYesterday) return `昨天 ${formatTime(d)}`
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function pendingHeaderText(p) {
+  if (p.status === 'confirmed') return '已执行的操作'
+  if (p.status === 'failed') return '执行失败的操作'
+  if (p.status === 'cancelled') return '已取消的操作'
+  return '需要你确认的操作'
+}
+
+function pendingParamEntries(pending) {
+  if (!pending?.params) return []
+  if (pending.tool_name === 'create_reservation') {
+    return createReservationParamEntries(pending)
+  }
+  return Object.entries(pending.params)
+    .map(([key, value]) => ({ label: key, value: formatPendingValue(value) }))
+    .filter(item => item.value)
+}
+
+function pendingPrimaryInfo(pending) {
+  if (!pending) return null
+
+  if (pending.tool_name === 'create_reservation') {
+    const params = pending.params || {}
+    const seatDetail = getCachedSeatDetail(params.seatId)
+    const roomName = seatDetail?.roomDisplayName || seatDetail?.roomName || ''
+    const seatLabel = seatDetail?.displayLabel || seatDetail?.seatCode
+    const title = seatLabel ? `座位 ${seatLabel}` : params.seatId != null ? `座位 #${params.seatId}` : '预约座位'
+    const metaParts = []
+
+    if (params.date) metaParts.push(params.date)
+    if (params.startTime && params.endTime) metaParts.push(`${params.startTime}-${params.endTime}`)
+    const durationText = formatReservationDuration(params.startTime, params.endTime)
+    if (durationText) metaParts.push(durationText)
+
+    return {
+      eyebrow: roomName,
+      title,
+      meta: metaParts.join(' · '),
+    }
+  }
+
+  if (pending.tool_name === 'cancel_reservation') {
+    const reservationId = pending.params?.reservationId
+    return {
+      eyebrow: '取消预约',
+      title: reservationId != null ? `预约 #${reservationId}` : '取消当前预约',
+      meta: '',
+    }
+  }
+
+  const entries = pendingParamEntries(pending)
+  if (!entries.length) {
+    return { eyebrow: '', title: '待确认操作', meta: '' }
+  }
+
+  const [first, ...rest] = entries
+  return {
+    eyebrow: '',
+    title: `${first.label}: ${first.value}`,
+    meta: rest.slice(0, 2).map(item => `${item.label}: ${item.value}`).join(' · '),
+  }
+}
+
+function pendingSecondaryEntries(pending) {
+  if (!pending?.params) return []
+  if (pending.tool_name === 'create_reservation') {
+    return createReservationSecondaryEntries(pending)
+  }
+  if (pending.tool_name === 'cancel_reservation') {
+    return []
+  }
+  return pendingParamEntries(pending).slice(1)
+}
+
+function createReservationParamEntries(pending) {
+  const params = pending.params || {}
+  const seatDetail = getCachedSeatDetail(params.seatId)
+  const entries = []
+  const roomName = seatDetail?.roomDisplayName || seatDetail?.roomName
+  const seatLabel = seatDetail?.displayLabel || seatDetail?.seatCode
+  const features = []
+
+  if (roomName) entries.push({ label: '自习室', value: roomName })
+  if (seatLabel) entries.push({ label: '座位', value: seatLabel })
+  else if (params.seatId != null) entries.push({ label: '座位', value: `#${params.seatId}` })
+  if (params.date) entries.push({ label: '日期', value: params.date })
+  if (params.startTime && params.endTime) {
+    entries.push({ label: '时段', value: `${params.startTime}-${params.endTime}` })
+  }
+  if (seatDetail?.hasPower) features.push('有电源')
+  if (seatDetail?.isWindowSide) features.push('靠窗')
+  if (seatDetail?.isAccessible) features.push('无障碍')
+  if (features.length) entries.push({ label: '特征', value: features.join(' / ') })
+  if (seatDetail?.locationDetail) entries.push({ label: '位置', value: seatDetail.locationDetail })
+
+  return entries
+}
+
+function createReservationSecondaryEntries(pending) {
+  const params = pending.params || {}
+  const seatDetail = getCachedSeatDetail(params.seatId)
+  const entries = []
+  const features = []
+
+  if (seatDetail?.seatType) entries.push({ label: '座位类型', value: seatDetail.seatType })
+  if (seatDetail?.hasPower) features.push('有电源')
+  if (seatDetail?.isWindowSide) features.push('靠窗')
+  if (seatDetail?.isAccessible) features.push('无障碍')
+  if (features.length) entries.push({ label: '特征', value: features.join(' / ') })
+  if (seatDetail?.locationDetail) entries.push({ label: '位置', value: seatDetail.locationDetail })
+  if (!seatDetail && params.seatId != null) entries.push({ label: '座位 ID', value: `#${params.seatId}` })
+
+  return entries
+}
+
+function formatReservationDuration(startTime, endTime) {
+  if (!startTime || !endTime) return ''
+  const start = parseClockMinutes(startTime)
+  const end = parseClockMinutes(endTime)
+  if (start == null || end == null || end <= start) return ''
+
+  const durationMinutes = end - start
+  const hours = Math.floor(durationMinutes / 60)
+  const minutes = durationMinutes % 60
+  if (minutes === 0) return `${hours}小时`
+  if (hours === 0) return `${minutes}分钟`
+  return `${hours}小时${minutes}分钟`
+}
+
+function parseClockMinutes(value) {
+  if (typeof value !== 'string') return null
+  const match = value.match(/^(\d{2}):(\d{2})$/)
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+function formatPendingValue(value) {
+  if (value == null || value === '') return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function normalizeSeatDetailKey(seatId) {
+  const num = Number(seatId)
+  return Number.isInteger(num) && num > 0 ? String(num) : ''
+}
+
+function getCachedSeatDetail(seatId) {
+  const key = normalizeSeatDetailKey(seatId)
+  return key ? pendingSeatDetails[key] || null : null
+}
+
+async function ensurePendingSeatDetail(pending) {
+  if (pending?.tool_name !== 'create_reservation') return
+  const key = normalizeSeatDetailKey(pending.params?.seatId)
+  if (!key || Object.prototype.hasOwnProperty.call(pendingSeatDetails, key) || pendingSeatDetailLoading[key]) {
+    return
+  }
+
+  pendingSeatDetailLoading[key] = true
+  try {
+    pendingSeatDetails[key] = await getSeatDetail(Number(key))
+  } catch {
+    pendingSeatDetails[key] = null
+  } finally {
+    pendingSeatDetailLoading[key] = false
+  }
+}
+
+function hydratePendingCards(messageList) {
+  for (const msg of messageList) {
+    if (msg.role === 'pending') {
+      void ensurePendingSeatDetail(msg.pending)
+    }
+  }
+}
+
+function normalizeConvId(value) {
+  const raw = Array.isArray(value) ? value[0] : value
+  const num = Number(raw)
+  return Number.isInteger(num) && num > 0 ? num : null
+}
+
+async function syncConversationQuery(conversationId) {
+  const currentConv = Array.isArray(route.query.conv) ? route.query.conv[0] : route.query.conv
+  const hasPromptQuery = route.query.q != null
+  const nextConv = conversationId != null ? String(conversationId) : null
+  if (currentConv === nextConv && !hasPromptQuery) return
+
+  const query = { ...route.query }
+  if (conversationId == null) delete query.conv
+  else query.conv = String(conversationId)
+  delete query.q
+  await router.replace({ query })
+}
+
+function rememberConversation(conversationId) {
+  if (conversationId == null) return
+  activeConvId.value = conversationId
+  void syncConversationQuery(conversationId)
 }
 
 async function scrollToBottom() {
@@ -167,72 +572,337 @@ async function scrollToBottom() {
   }
 }
 
+// ── Conversation list ───────────────────────────────────────────────
+
+async function loadConversations() {
+  convLoading.value = true
+  try {
+    const pageSize = 100
+    const records = []
+    let page = 1
+    let total = 0
+
+    while (page === 1 || records.length < total) {
+      const data = await getConversations({ page, pageSize })
+      const batch = data.records || []
+      total = data.total || 0
+      records.push(...batch)
+      if (batch.length === 0) break
+      page += 1
+    }
+
+    conversations.value = records.map(r => ({
+      id: r.id,
+      title: r.title,
+      timeLabel: formatConvTime(r.last_message_at || r.created_at),
+    }))
+  } catch {
+    // request.js interceptor already handles
+  } finally {
+    convLoading.value = false
+  }
+}
+
+async function loadConversationHistory(conversationId) {
+  const chunks = []
+  let beforeId = null
+
+  while (true) {
+    const page = await getMessages(conversationId, { limit: 200, beforeId })
+    const records = page.records || []
+    chunks.push(records)
+
+    if (!page.has_more || page.next_before_id == null || records.length === 0) {
+      break
+    }
+    beforeId = page.next_before_id
+  }
+
+  return chunks.reverse().flat()
+}
+
+async function switchConversation(id) {
+  if (id === activeConvId.value || loading.value) return
+  abortStream()
+  clearActivity()
+  activeConvId.value = id
+  void syncConversationQuery(id)
+  messages.value = [welcomeMsg()]
+
+  try {
+    const history = await loadConversationHistory(id)
+    const historyMsgs = history.map(m => {
+      if (m.role === 'pending') {
+        return createMessage({
+          id: nextId(),
+          role: 'pending',
+          pending: {
+            action_id: m.pending?.action_id,
+            tool_name: m.pending?.tool_name,
+            summary: m.pending?.summary || '',
+            params: m.pending?.params || {},
+            status: m.pending?.status || 'pending',
+          },
+        })
+      }
+      return createMessage({
+        id: nextId(),
+        role: m.role,
+        content: m.content,
+        time: formatApiTime(m.created_at),
+      })
+    })
+    messages.value = [welcomeMsg(), ...historyMsgs]
+    hydratePendingCards(historyMsgs)
+    await scrollToBottom()
+  } catch {
+    activeConvId.value = null
+    messages.value = [welcomeMsg()]
+    void syncConversationQuery(null)
+  }
+}
+
+function newConversation() {
+  abortStream()
+  clearActivity()
+  activeConvId.value = null
+  messages.value = [welcomeMsg()]
+  inputText.value = ''
+  void syncConversationQuery(null)
+}
+
+// ── Send / stream ───────────────────────────────────────────────────
+
 async function sendMessage() {
   const text = inputText.value.trim()
   if (!text || loading.value) return
 
-  const conv = conversations.value.find(c => c.id === activeConvId.value)
-  if (conv && (conv.title === '当前对话' || conv.title === '新对话')) {
-    conv.title = text.length > 14 ? text.slice(0, 14) + '…' : text
-  }
-
-  messages.value.push({
-    id: Date.now(),
+  const userMsg = createMessage({
+    id: nextId(),
     role: 'user',
     content: text,
     time: formatTime(new Date()),
   })
+  messages.value.push(userMsg)
   inputText.value = ''
-  loading.value = true
-  await scrollToBottom()
 
-  await new Promise(r => setTimeout(r, 900 + Math.random() * 700))
-
-  messages.value.push({
-    id: Date.now() + 1,
-    role: 'ai',
-    content: mockReplies[replyIdx % mockReplies.length],
-    time: formatTime(new Date()),
-  })
-  replyIdx++
-  loading.value = false
-  await scrollToBottom()
+  await runStream({ message: text })
 }
 
-function clearMessages() {
-  messages.value = [makeWelcomeMsg()]
-  replyIdx = 0
+async function confirmAction(msg) {
+  if (loading.value) return
+  msg.pending.status = 'confirmed'  // optimistic; server is source of truth
+  await runStream({ confirmedActionId: msg.pending.action_id })
 }
 
-function switchConversation(id) {
-  if (id === activeConvId.value) return
-  activeConvId.value = id
-  const conv = conversations.value.find(c => c.id === id)
-  if (id === 0) {
-    messages.value = [makeWelcomeMsg()]
-  } else {
-    messages.value = [
-      { ...makeWelcomeMsg(), id: -1 },
-      { id: 1, role: 'user', content: conv?.title || '问题', time: conv?.time || '' },
-      { id: 2, role: 'ai', content: mockReplies[id % mockReplies.length], time: conv?.time || '' },
-    ]
+async function cancelAction(msg) {
+  if (loading.value || activeConvId.value == null) return
+
+  pendingActionBusyId.value = msg.pending.action_id
+  try {
+    await cancelPendingAction(msg.pending.action_id, activeConvId.value)
+    msg.pending.status = 'cancelled'
+  } catch {
+    // request helper already surfaced the error
+  } finally {
+    if (pendingActionBusyId.value === msg.pending.action_id) {
+      pendingActionBusyId.value = null
+    }
   }
-  scrollToBottom()
 }
 
-function newConversation() {
-  const newId = Date.now()
-  conversations.value.unshift({ id: newId, title: '新对话', time: '刚刚' })
-  activeConvId.value = newId
-  messages.value = [makeWelcomeMsg()]
+async function runStream({ message = null, confirmedActionId = null }) {
+  loading.value = true
+  abortController = new AbortController()
+  setActivity('thinking', confirmedActionId != null ? '正在继续执行已确认的操作…' : '正在思考你的问题…')
+
+  // Placeholder assistant bubble — streams tokens directly into .content.
+  const assistantMsg = createMessage({
+    id: nextId(),
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    toolHint: '',
+    time: '',
+  })
+  messages.value.push(assistantMsg)
+  await scrollToBottom()
+
+  try {
+    await chatStream({
+      conversationId: activeConvId.value,
+      message,
+      confirmedActionId,
+      signal: abortController.signal,
+      onEvent: ev => handleEvent(ev, assistantMsg),
+    })
+  } catch {
+    flushTypewriter(assistantMsg)
+    if (!assistantMsg.content) {
+      const idx = messages.value.indexOf(assistantMsg)
+      if (idx !== -1) messages.value.splice(idx, 1)
+    }
+  } finally {
+    // Mark typewriter buffer as "no more incoming" so its tick drains and stops.
+    // The cursor + streaming flag stay on until the buffer empties.
+    finishTypewriter(assistantMsg)
+    waitForTypewriterDrain(assistantMsg).then(() => {
+      assistantMsg.streaming = false
+      if (assistantMsg.content && !assistantMsg.time) {
+        assistantMsg.time = formatTime(new Date())
+      }
+      if (activityState.value === 'thinking' || activityState.value === 'tool' || activityState.value === 'streaming') {
+        clearActivity()
+      }
+      scrollToBottom()
+    })
+    loading.value = false
+    abortController = null
+  }
 }
+
+function waitForTypewriterDrain(msg) {
+  return new Promise(resolve => {
+    const check = () => {
+      const state = typewriterState.get(msg.id)
+      if (!state || (state.pending.length === 0 && state.done)) resolve()
+      else setTimeout(check, TYPE_INTERVAL_MS)
+    }
+    check()
+  })
+}
+
+function handleEvent(ev, assistantMsg) {
+  switch (ev.type) {
+    case 'token':
+      setActivity('streaming', '正在生成回复…')
+      assistantMsg.toolHint = ''
+      pushTokens(assistantMsg, ev.text || '')
+      break
+
+    case 'tool_call':
+      setActivity('tool', toolCallHint(ev.name))
+      assistantMsg.toolHint = toolCallHint(ev.name)
+      break
+
+    case 'tool_result':
+      if (ev.ok === false && ev.error) {
+        setActivity('error', `工具调用失败：${ev.error}`)
+        assistantMsg.toolHint = `工具调用失败：${ev.error}`
+      } else {
+        setActivity('thinking', '工具调用完成，正在整理答案…')
+        assistantMsg.toolHint = ''
+      }
+      break
+
+    case 'confirm_required': {
+      if (ev.conversation_id) {
+        rememberConversation(ev.conversation_id)
+        loadConversations()
+      }
+      // Drop the empty placeholder — pending card replaces it for this turn.
+      flushTypewriter(assistantMsg)
+      if (!assistantMsg.content) {
+        const idx = messages.value.indexOf(assistantMsg)
+        if (idx !== -1) messages.value.splice(idx, 1)
+      } else {
+        assistantMsg.streaming = false
+        assistantMsg.time = formatTime(new Date())
+      }
+      setActivity('confirm', '已生成待确认操作，请确认后继续')
+      const pendingMsg = createMessage({
+        id: nextId(),
+        role: 'pending',
+        pending: {
+          action_id: ev.action_id,
+          tool_name: ev.tool_name,
+          summary: ev.summary || '',
+          params: ev.params || {},
+          status: 'pending',
+        },
+      })
+      messages.value.push(pendingMsg)
+      hydratePendingCards([pendingMsg])
+      scrollToBottom()
+      break
+    }
+
+    case 'final':
+      if (ev.conversation_id) {
+        rememberConversation(ev.conversation_id)
+        loadConversations()
+      }
+      break
+
+    case 'error':
+      setActivity('error', ev.message || 'AI 内部错误')
+      ElMessage.error(ev.message || 'AI 内部错误')
+      break
+  }
+}
+
+function toolCallHint(name) {
+  const map = {
+    search_rooms: '正在查询自习室…',
+    get_room_detail: '正在查询自习室详情…',
+    get_seat_availability: '正在查询座位可用情况…',
+    list_my_reservations: '正在查询你的预约…',
+    list_notices: '正在查询公告…',
+    list_my_violations: '正在查询违约记录…',
+    resolve_date: '正在解析日期…',
+    create_reservation: '准备创建预约…',
+    cancel_reservation: '准备取消预约…',
+  }
+  return map[name] || `调用工具 ${name}…`
+}
+
+function abortStream() {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+    setActivity('error', '已停止生成')
+  }
+  // Drain any in-flight typewriter buffers so the partial text is shown.
+  for (const msg of messages.value) {
+    if (msg.role === 'assistant' && typewriterState.has(msg.id)) {
+      flushTypewriter(msg)
+      msg.streaming = false
+    }
+  }
+}
+
+// ── Lifecycle ───────────────────────────────────────────────────────
+
+watch(
+  () => route.query.conv,
+  async convQuery => {
+    const convId = normalizeConvId(convQuery)
+    if (convId == null) {
+      if (activeConvId.value != null && !loading.value) newConversation()
+      return
+    }
+    if (convId !== activeConvId.value) {
+      await switchConversation(convId)
+    }
+  }
+)
 
 onMounted(async () => {
+  await loadConversations()
+  const convId = normalizeConvId(route.query.conv)
+  if (convId != null) {
+    await switchConversation(convId)
+    return
+  }
   const q = route.query.q
-  if (q) {
+  if (q && typeof q === 'string') {
     inputText.value = q
     await sendMessage()
   }
+})
+
+onBeforeUnmount(() => {
+  abortStream()
 })
 </script>
 
@@ -296,6 +966,13 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.conv-empty {
+  font-size: 12px;
+  color: #a0aec0;
+  text-align: center;
+  padding: 20px 8px;
 }
 
 .conv-item {
@@ -435,23 +1112,53 @@ onMounted(async () => {
   margin-top: 2px;
 }
 
-.chat-clear-btn {
-  font-size: 13px;
-  color: #8492a6;
-  background: none;
-  border: 1px solid #e8eaf2;
-  border-radius: 8px;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  white-space: nowrap;
+.chat-activity-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 24px;
+  border-bottom: 1px solid #f0f2f8;
+  background: linear-gradient(180deg, #fcfdff 0%, #f8faff 100%);
+}
+
+.activity-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #dbe4f3;
+  border-top-color: var(--nt-primary);
+  animation: activity-spin 0.8s linear infinite;
   flex-shrink: 0;
 }
 
-.chat-clear-btn:hover {
-  background: #fff5f5;
-  color: #e53e3e;
-  border-color: #fed7d7;
+.activity-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #f59e0b;
+}
+
+.activity-text {
+  font-size: 12px;
+  color: #5b6780;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-activity-error .activity-dot {
+  background: #ef4444;
+}
+
+.chat-activity-confirm .activity-dot {
+  background: #f59e0b;
+}
+
+@keyframes activity-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ── Messages ── */
@@ -537,6 +1244,125 @@ onMounted(async () => {
   color: #2d3748;
 }
 
+/* Markdown bubble: marked produces real block elements, so disable pre-wrap
+   (which would otherwise duplicate spacing) and style each tag. */
+.bubble-md {
+  white-space: normal;
+}
+
+.md-body {
+  display: inline;
+}
+
+.md-body :deep(p) {
+  margin: 0 0 8px;
+}
+.md-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.md-body :deep(ul),
+.md-body :deep(ol) {
+  margin: 6px 0 8px;
+  padding-left: 22px;
+}
+.md-body :deep(li) {
+  margin: 2px 0;
+}
+.md-body :deep(h1),
+.md-body :deep(h2),
+.md-body :deep(h3),
+.md-body :deep(h4) {
+  margin: 10px 0 6px;
+  font-weight: 700;
+  color: #1a202c;
+}
+.md-body :deep(h1) { font-size: 17px; }
+.md-body :deep(h2) { font-size: 16px; }
+.md-body :deep(h3) { font-size: 15px; }
+.md-body :deep(h4) { font-size: 14px; }
+.md-body :deep(code) {
+  background: #f4f6fb;
+  border: 1px solid #eef0f6;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: #c2410c;
+}
+.md-body :deep(pre) {
+  background: #1a202c;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.md-body :deep(pre code) {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.md-body :deep(a) {
+  color: var(--nt-primary);
+  text-decoration: underline;
+}
+.md-body :deep(blockquote) {
+  border-left: 3px solid var(--nt-primary-border);
+  padding: 2px 0 2px 10px;
+  margin: 6px 0;
+  color: #4a5568;
+  background: var(--nt-primary-light);
+  border-radius: 0 6px 6px 0;
+}
+.md-body :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.md-body :deep(th),
+.md-body :deep(td) {
+  border: 1px solid #e8eaf2;
+  padding: 4px 10px;
+}
+.md-body :deep(th) {
+  background: #f8f9fc;
+  font-weight: 600;
+}
+.md-body :deep(strong) { font-weight: 700; }
+.md-body :deep(em) { font-style: italic; }
+.md-body :deep(hr) {
+  border: none;
+  border-top: 1px solid #e8eaf2;
+  margin: 10px 0;
+}
+
+.bubble-tool-hint {
+  font-size: 12px;
+  color: #8492a6;
+  background: #f4f6fb;
+  border: 1px dashed #e8eaf2;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  display: inline-block;
+}
+
+.cursor-blink {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--nt-primary);
+  animation: cursor-fade 1s steps(1) infinite;
+}
+
+@keyframes cursor-fade {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
 .bubble-time {
   font-size: 11px;
   margin-top: 6px;
@@ -575,6 +1401,124 @@ onMounted(async () => {
   0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
   40% { transform: translateY(-6px); opacity: 1; }
 }
+
+/* ── Pending action card ── */
+.pending-card {
+  max-width: 65%;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.pending-confirmed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.pending-cancelled {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  opacity: 0.85;
+}
+
+.pending-failed {
+  background: #fff5f5;
+  border-color: #fecaca;
+}
+
+.pending-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+  margin-bottom: 8px;
+}
+
+.pending-confirmed .pending-header { color: #15803d; }
+.pending-failed .pending-header { color: #dc2626; }
+.pending-cancelled .pending-header { color: #6b7280; }
+
+.pending-primary {
+  margin-bottom: 12px;
+}
+
+.pending-primary-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 2px;
+}
+
+.pending-primary-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a202c;
+  line-height: 1.4;
+}
+
+.pending-primary-meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.pending-confirmed .pending-primary-eyebrow { color: #15803d; }
+.pending-failed .pending-primary-eyebrow { color: #dc2626; }
+.pending-cancelled .pending-primary-eyebrow { color: #6b7280; }
+
+.pending-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pending-detail-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(0,0,0,0.05);
+  border-radius: 8px;
+}
+
+.pending-detail-label {
+  font-size: 12px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.pending-detail-value {
+  font-size: 12px;
+  color: #1f2937;
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
+
+.pending-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pending-status-tag {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 0 0;
+  text-align: right;
+}
+
+.pending-status-ok { color: #15803d; }
+.pending-status-failed { color: #dc2626; }
+.pending-status-cancel { color: #6b7280; }
 
 /* ── Input Area ── */
 .chat-input-area {
