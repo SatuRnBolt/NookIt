@@ -42,6 +42,34 @@ public class StudentRoomController {
         return Result.success(roomService.getRoomById(id));
     }
 
+    @GetMapping("/seats/{seatId}")
+    @Operation(summary = "座位详情")
+    public Result<Map<String, Object>> getSeat(@PathVariable Long seatId) {
+        Seat seat = seatMapper.selectById(seatId);
+        if (seat == null) {
+            return Result.success(null);
+        }
+
+        RoomVO room = roomService.getRoomById(seat.getStudyRoomId());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", seat.getId());
+        result.put("seatCode", seat.getSeatCode());
+        result.put("displayLabel", seat.getDisplayLabel());
+        result.put("seatType", seat.getSeatType());
+        result.put("rowNo", seat.getRowNo());
+        result.put("colNo", seat.getColNo());
+        result.put("hasPower", seat.getHasPower());
+        result.put("isWindowSide", seat.getIsWindowSide());
+        result.put("isAccessible", seat.getIsAccessible());
+        result.put("seatStatus", seat.getSeatStatus());
+        result.put("isBookable", seat.getIsBookable());
+        result.put("roomId", room != null ? room.getId() : seat.getStudyRoomId());
+        result.put("roomName", room != null ? room.getRoomName() : null);
+        result.put("roomDisplayName", room != null ? room.getDisplayName() : null);
+        result.put("locationDetail", room != null ? room.getLocationDetail() : null);
+        return Result.success(result);
+    }
+
     @GetMapping("/rooms/{roomId}/seatmap")
     @Operation(summary = "座位地图")
     public Result<SeatMapVO> getSeatMap(@PathVariable Long roomId) {
