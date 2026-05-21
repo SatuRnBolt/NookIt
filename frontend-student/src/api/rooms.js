@@ -13,6 +13,10 @@ export function getRoomDetail(id) {
   return get(`/api/student/rooms/${id}`)
 }
 
+export function getSeatDetail(seatId) {
+  return get(`/api/student/seats/${seatId}`)
+}
+
 export function getSeatMap(roomId, date) {
   return get(`/api/student/rooms/${roomId}/seatmap`, { date })
 }
