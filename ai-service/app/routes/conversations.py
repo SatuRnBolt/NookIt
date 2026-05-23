@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import repo
@@ -18,6 +18,7 @@ class ConversationVO(BaseModel):
     id: int
     title: str | None
     status: str
+    is_pinned: bool
     last_message_at: datetime | None
     created_at: datetime
 
@@ -27,6 +28,19 @@ class ConversationsPage(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ConversationUpdate(BaseModel):
+    """Rename and/or (un)pin. At least one field must be provided."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=128)
+    pinned: bool | None = None
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> "ConversationUpdate":
+        if self.title is None and self.pinned is None:
+            raise ValueError("title or pinned is required")
+        return self
 
 
 class MessageVO(BaseModel):
@@ -60,6 +74,7 @@ async def list_conversations(
                 id=c.id,
                 title=c.conversation_title or fallback_titles.get(c.id),
                 status=c.conversation_status,
+                is_pinned=c.is_pinned,
                 last_message_at=c.last_message_at,
                 created_at=c.created_at,
             )
@@ -69,6 +84,46 @@ async def list_conversations(
         page=page,
         page_size=page_size,
     )
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationVO)
+async def update_conversation(
+    conversation_id: int,
+    body: ConversationUpdate,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ConversationVO:
+    conv = await repo.get_conversation_for_user(session, conversation_id, user.user_id)
+    if conv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+
+    await repo.update_conversation_meta(session, conv, title=body.title, pinned=body.pinned)
+    await session.commit()
+    await session.refresh(conv)
+
+    fallback_titles = await repo.load_first_user_messages(session, [conv.id])
+    return ConversationVO(
+        id=conv.id,
+        title=conv.conversation_title or fallback_titles.get(conv.id),
+        status=conv.conversation_status,
+        is_pinned=conv.is_pinned,
+        last_message_at=conv.last_message_at,
+        created_at=conv.created_at,
+    )
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    conversation_id: int,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    conv = await repo.get_conversation_for_user(session, conversation_id, user.user_id)
+    if conv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found")
+
+    await repo.archive_conversation(session, conv)
+    await session.commit()
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=MessagesPage)

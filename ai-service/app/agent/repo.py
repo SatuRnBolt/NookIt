@@ -52,18 +52,27 @@ async def list_user_conversations(
     session: AsyncSession, user_id: int, *, page: int = 1, page_size: int = 20
 ) -> tuple[list[AiConversation], int]:
     offset = max(0, (page - 1) * page_size)
+    # Archived conversations are soft-deleted and excluded from the list.
+    # Pinned conversations float to the top, ordered by when they were pinned.
+    visible = (
+        AiConversation.user_id == user_id,
+        AiConversation.conversation_status != "archived",
+    )
     stmt = (
         select(AiConversation)
-        .where(AiConversation.user_id == user_id)
-        .order_by(desc(AiConversation.last_message_at), desc(AiConversation.id))
+        .where(*visible)
+        .order_by(
+            desc(AiConversation.is_pinned),
+            desc(AiConversation.pinned_at),
+            desc(AiConversation.last_message_at),
+            desc(AiConversation.id),
+        )
         .offset(offset)
         .limit(page_size)
     )
     items = (await session.execute(stmt)).scalars().all()
     total = (
-        await session.execute(
-            select(func.count(AiConversation.id)).where(AiConversation.user_id == user_id)
-        )
+        await session.execute(select(func.count(AiConversation.id)).where(*visible))
     ).scalar_one()
     return list(items), int(total)
 
@@ -99,6 +108,28 @@ async def set_conversation_title_if_missing(
     title = normalize_conversation_title(title_source)
     if title:
         conv.conversation_title = title
+
+
+async def archive_conversation(session: AsyncSession, conv: AiConversation) -> None:
+    """Soft-delete: mark as archived so it drops out of the user's list."""
+    conv.conversation_status = "archived"
+    await session.flush()
+
+
+async def update_conversation_meta(
+    session: AsyncSession,
+    conv: AiConversation,
+    *,
+    title: str | None = None,
+    pinned: bool | None = None,
+) -> None:
+    """Rename and/or (un)pin a conversation. Only the provided fields change."""
+    if title is not None:
+        conv.conversation_title = normalize_conversation_title(title)
+    if pinned is not None:
+        conv.is_pinned = pinned
+        conv.pinned_at = func.current_timestamp() if pinned else None
+    await session.flush()
 
 
 # --- messages -------------------------------------------------------------

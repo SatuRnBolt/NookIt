@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -34,6 +35,8 @@ class AiConversation(Base):
         nullable=False,
         default="active",
     )
+    is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     context_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

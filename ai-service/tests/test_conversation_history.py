@@ -110,3 +110,86 @@ def test_pending_status_mapping():
     assert _to_pending_card_status("ignored") == "cancelled"
     assert _to_pending_card_status("failed") == "failed"
     assert _to_pending_card_status("pending") == "pending"
+
+
+class _FlushSession:
+    async def flush(self):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_update_conversation_meta_renames_and_normalizes_title():
+    conv = SimpleNamespace(conversation_title="old", is_pinned=False, pinned_at=None)
+
+    await repo.update_conversation_meta(_FlushSession(), conv, title="  你好   世界 ")
+
+    assert conv.conversation_title == "你好 世界"
+    # pin state untouched when only renaming
+    assert conv.is_pinned is False
+    assert conv.pinned_at is None
+
+
+@pytest.mark.asyncio
+async def test_update_conversation_meta_pin_and_unpin():
+    conv = SimpleNamespace(conversation_title="t", is_pinned=False, pinned_at=None)
+
+    await repo.update_conversation_meta(_FlushSession(), conv, pinned=True)
+    assert conv.is_pinned is True
+    assert conv.pinned_at is not None  # SQL CURRENT_TIMESTAMP expression
+    assert conv.conversation_title == "t"  # title untouched
+
+    await repo.update_conversation_meta(_FlushSession(), conv, pinned=False)
+    assert conv.is_pinned is False
+    assert conv.pinned_at is None
+
+
+@pytest.mark.asyncio
+async def test_archive_conversation_soft_deletes():
+    conv = SimpleNamespace(conversation_status="active")
+
+    await repo.archive_conversation(_FlushSession(), conv)
+
+    assert conv.conversation_status == "archived"
+
+
+class _MultiResult:
+    def __init__(self, rows=None, scalar=None):
+        self._rows = rows or []
+        self._scalar = scalar
+
+    def scalars(self):
+        return _FakeScalarResult(self._rows)
+
+    def scalar_one(self):
+        return self._scalar
+
+
+class _SeqSession:
+    """Returns queued results in order, recording every statement."""
+
+    def __init__(self, results):
+        self._results = list(results)
+        self.statements = []
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+        return self._results.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_list_user_conversations_excludes_archived_and_pins_first():
+    session = _SeqSession(
+        [_MultiResult(rows=[SimpleNamespace(id=1)]), _MultiResult(scalar=1)]
+    )
+
+    items, total = await repo.list_user_conversations(session, user_id=5, page=1, page_size=20)
+
+    assert [c.id for c in items] == [1]
+    assert total == 1
+
+    select_sql = str(session.statements[0])
+    assert "conversation_status !=" in select_sql  # archived filtered out
+    assert "is_pinned DESC" in select_sql  # pinned float to top
+    count_sql = str(session.statements[1])
+    assert "count(" in count_sql.lower()
+    assert "conversation_status !=" in count_sql
