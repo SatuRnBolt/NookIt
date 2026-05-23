@@ -63,10 +63,50 @@ async function postJson(url, body = null) {
   return resp.json()
 }
 
+async function sendJson(method, url, body = null) {
+  let resp
+  try {
+    resp = await fetch(url, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
+      body: body == null ? null : JSON.stringify(body),
+    })
+  } catch {
+    ElMessage.error('网络错误，AI 服务不可达')
+    throw new Error('network')
+  }
+  if (resp.status === 401) {
+    handleAuthFailure()
+    throw new FatalAiError('auth')
+  }
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    ElMessage.error(`AI 服务错误 ${resp.status}: ${text || resp.statusText}`)
+    throw new Error(`HTTP ${resp.status}`)
+  }
+  // 204 No Content has an empty body.
+  if (resp.status === 204) return null
+  return resp.json()
+}
+
 export function getConversations(query = {}) {
   const page = query.page || 1
   const pageSize = query.pageSize || 30
   return getJson(`/api/ai/conversations?page=${page}&page_size=${pageSize}`)
+}
+
+/** Rename and/or (un)pin a conversation. Pass { title } and/or { pinned }. */
+export function updateConversation(conversationId, patch) {
+  return sendJson('PATCH', `/api/ai/conversations/${conversationId}`, patch)
+}
+
+/** Soft-delete a conversation (server marks it archived). */
+export function deleteConversation(conversationId) {
+  return sendJson('DELETE', `/api/ai/conversations/${conversationId}`)
 }
 
 export function getMessages(conversationId, query = {}) {

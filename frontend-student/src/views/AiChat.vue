@@ -19,8 +19,31 @@
           :class="['conv-item', { 'conv-active': conv.id === activeConvId }]"
           @click="switchConversation(conv.id)"
         >
-          <div class="conv-item-title">{{ conv.title || '新对话' }}</div>
-          <div class="conv-item-time">{{ conv.timeLabel }}</div>
+          <div class="conv-item-main">
+            <div class="conv-item-title">
+              <el-icon v-if="conv.pinned" class="conv-pin-icon" :size="11"><Top /></el-icon>
+              <span class="conv-item-title-text">{{ conv.title || '新对话' }}</span>
+            </div>
+            <div class="conv-item-time">{{ conv.timeLabel }}</div>
+          </div>
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            @command="cmd => onConvCommand(cmd, conv)"
+          >
+            <span class="conv-item-more" title="更多操作" @click.stop>
+              <el-icon :size="15"><MoreFilled /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="pin">
+                  {{ conv.pinned ? '取消置顶' : '置顶' }}
+                </el-dropdown-item>
+                <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </div>
@@ -119,7 +142,6 @@
             </div>
 
             <div :class="['chat-bubble', msg.role === 'user' ? 'bubble-user' : 'bubble-ai']">
-              <div v-if="msg.toolHint" class="bubble-tool-hint">{{ msg.toolHint }}</div>
               <div v-if="msg.role === 'assistant'" class="bubble-text bubble-md">
                 <div class="md-body" v-html="renderMarkdown(msg.content)"></div><span v-if="msg.streaming" class="cursor-blink">▍</span>
               </div>
@@ -184,12 +206,19 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus, MagicStick, Warning } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft, Plus, MagicStick, Warning, MoreFilled, Top } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useStudentAuthStore } from '../stores/auth'
-import { cancelPendingAction, chatStream, getConversations, getMessages } from '../api/ai'
+import {
+  cancelPendingAction,
+  chatStream,
+  deleteConversation,
+  getConversations,
+  getMessages,
+  updateConversation,
+} from '../api/ai'
 import { getSeatDetail } from '../api/rooms'
 import defaultAvatar from '../assets/stu-default-icon.png'
 
@@ -594,6 +623,7 @@ async function loadConversations() {
     conversations.value = records.map(r => ({
       id: r.id,
       title: r.title,
+      pinned: !!r.is_pinned,
       timeLabel: formatConvTime(r.last_message_at || r.created_at),
     }))
   } catch {
@@ -671,6 +701,69 @@ function newConversation() {
   void syncConversationQuery(null)
 }
 
+// ── Conversation actions (置顶 / 重命名 / 删除) ───────────────────────
+
+function onConvCommand(cmd, conv) {
+  if (cmd === 'pin') togglePin(conv)
+  else if (cmd === 'rename') renameConversation(conv)
+  else if (cmd === 'delete') removeConversation(conv)
+}
+
+async function togglePin(conv) {
+  const nextPinned = !conv.pinned
+  try {
+    await updateConversation(conv.id, { pinned: nextPinned })
+    ElMessage.success(nextPinned ? '已置顶' : '已取消置顶')
+    await loadConversations()
+  } catch {
+    // api layer already surfaced the error
+  }
+}
+
+async function renameConversation(conv) {
+  let value
+  try {
+    const res = await ElMessageBox.prompt('请输入新的对话名称', '重命名对话', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: conv.title || '',
+      inputValidator: v => (v && v.trim() ? true : '名称不能为空'),
+      inputErrorMessage: '名称不能为空',
+    })
+    value = res.value
+  } catch {
+    return // user cancelled
+  }
+  const title = value.trim().slice(0, 128)
+  try {
+    await updateConversation(conv.id, { title })
+    ElMessage.success('已重命名')
+    await loadConversations()
+  } catch {
+    // handled by api layer
+  }
+}
+
+async function removeConversation(conv) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除对话「${conv.title || '新对话'}」吗？删除后将不再显示。`,
+      '删除对话',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return // user cancelled
+  }
+  try {
+    await deleteConversation(conv.id)
+    ElMessage.success('已删除')
+    if (conv.id === activeConvId.value) newConversation()
+    await loadConversations()
+  } catch {
+    // handled by api layer
+  }
+}
+
 // ── Send / stream ───────────────────────────────────────────────────
 
 async function sendMessage() {
@@ -722,7 +815,6 @@ async function runStream({ message = null, confirmedActionId = null }) {
     role: 'assistant',
     content: '',
     streaming: true,
-    toolHint: '',
     time: '',
   })
   messages.value.push(assistantMsg)
@@ -776,22 +868,18 @@ function handleEvent(ev, assistantMsg) {
   switch (ev.type) {
     case 'token':
       setActivity('streaming', '正在生成回复…')
-      assistantMsg.toolHint = ''
       pushTokens(assistantMsg, ev.text || '')
       break
 
     case 'tool_call':
       setActivity('tool', toolCallHint(ev.name))
-      assistantMsg.toolHint = toolCallHint(ev.name)
       break
 
     case 'tool_result':
       if (ev.ok === false && ev.error) {
         setActivity('error', `工具调用失败：${ev.error}`)
-        assistantMsg.toolHint = `工具调用失败：${ev.error}`
       } else {
         setActivity('thinking', '工具调用完成，正在整理答案…')
-        assistantMsg.toolHint = ''
       }
       break
 
@@ -976,7 +1064,10 @@ onBeforeUnmount(() => {
 }
 
 .conv-item {
-  padding: 10px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 10px 10px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
@@ -990,13 +1081,29 @@ onBeforeUnmount(() => {
   background: var(--nt-primary-light) !important;
 }
 
+.conv-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
 .conv-item-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
   font-weight: 500;
   color: #2d3748;
+}
+
+.conv-item-title-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.conv-pin-icon {
+  flex-shrink: 0;
+  color: var(--nt-primary);
 }
 
 .conv-active .conv-item-title {
@@ -1008,6 +1115,29 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: #a0aec0;
   margin-top: 2px;
+}
+
+.conv-item-more {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #a0aec0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.conv-item:hover .conv-item-more,
+.conv-active .conv-item-more {
+  opacity: 1;
+}
+
+.conv-item-more:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #4a5568;
 }
 
 /* ── Main Chat Column ── */
@@ -1338,17 +1468,6 @@ onBeforeUnmount(() => {
   border: none;
   border-top: 1px solid #e8eaf2;
   margin: 10px 0;
-}
-
-.bubble-tool-hint {
-  font-size: 12px;
-  color: #8492a6;
-  background: #f4f6fb;
-  border: 1px dashed #e8eaf2;
-  border-radius: 6px;
-  padding: 4px 8px;
-  margin-bottom: 8px;
-  display: inline-block;
 }
 
 .cursor-blink {
