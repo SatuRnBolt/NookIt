@@ -89,9 +89,6 @@
         <template v-for="msg in messages" :key="msg.id">
           <!-- pending confirm card -->
           <div v-if="msg.role === 'pending'" class="chat-msg chat-msg-ai">
-            <div class="chat-bubble-avatar ai-avatar">
-              <el-icon :size="14" color="#f59e0b"><Warning /></el-icon>
-            </div>
             <div class="pending-card" :class="`pending-${msg.pending.status}`">
               <div class="pending-header">
                 <el-icon :size="14"><Warning /></el-icon>
@@ -137,32 +134,23 @@
             v-else
             :class="['chat-msg', msg.role === 'user' ? 'chat-msg-user' : 'chat-msg-ai']"
           >
-            <div v-if="msg.role === 'assistant'" class="chat-bubble-avatar ai-avatar">
-              <MagicStick style="width:14px;height:14px;color:var(--nt-primary)" />
-            </div>
-
-            <div :class="['chat-bubble', msg.role === 'user' ? 'bubble-user' : 'bubble-ai']">
-              <div v-if="msg.role === 'assistant'" class="bubble-text bubble-md">
-                <div class="md-body" v-html="renderMarkdown(msg.content)"></div><span v-if="msg.streaming" class="cursor-blink">▍</span>
-              </div>
-              <div v-else class="bubble-text">
-                {{ msg.content }}
-              </div>
+            <!-- user: chat bubble; assistant: plain text on the canvas (no bubble / avatar) -->
+            <div v-if="msg.role === 'user'" class="chat-bubble bubble-user">
+              <div class="bubble-text">{{ msg.content }}</div>
               <div v-if="msg.time" class="bubble-time">{{ msg.time }}</div>
             </div>
-
-            <div v-if="msg.role === 'user'" class="chat-bubble-avatar user-avatar">
-              <img :src="auth.user?.avatarUrl || defaultAvatar" class="bubble-avatar-img" />
+            <div v-else class="ai-answer">
+              <div class="bubble-text bubble-md">
+                <div class="md-body" v-html="renderMarkdown(msg.content)"></div><span v-if="msg.streaming" class="cursor-blink">▍</span>
+              </div>
+              <div v-if="msg.time" class="bubble-time">{{ msg.time }}</div>
             </div>
           </div>
         </template>
 
         <!-- thinking indicator: only before the first token arrives -->
         <div v-if="loading && !hasStreamingAssistant" class="chat-msg chat-msg-ai">
-          <div class="chat-bubble-avatar ai-avatar">
-            <img src="../assets/deepseek-color.svg" style="width:18px;height:18px;" />
-          </div>
-          <div class="chat-bubble bubble-ai bubble-typing">
+          <div class="ai-typing">
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
@@ -207,10 +195,9 @@
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Plus, MagicStick, Warning, MoreFilled, Top } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus, Warning, MoreFilled, Top } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { useStudentAuthStore } from '../stores/auth'
 import {
   cancelPendingAction,
   chatStream,
@@ -220,7 +207,7 @@ import {
   updateConversation,
 } from '../api/ai'
 import { getSeatDetail } from '../api/rooms'
-import defaultAvatar from '../assets/stu-default-icon.png'
+import { getReservationDetail } from '../api/reservations'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -231,7 +218,6 @@ function renderMarkdown(text) {
 
 const router = useRouter()
 const route = useRoute()
-const auth = useStudentAuthStore()
 
 const messagesEl = ref(null)
 const inputText = ref('')
@@ -245,6 +231,9 @@ const activeConvId = ref(null)  // null = brand-new (not yet persisted)
 const messages = ref([welcomeMsg()])
 const pendingSeatDetails = reactive({})
 const pendingSeatDetailLoading = reactive({})
+// Cancel cards only carry a reservationId; resolve the rest from the reservations API.
+const pendingReservationDetails = reactive({})
+const pendingReservationLoading = reactive({})
 const pendingActionBusyId = ref(null)
 
 let msgSeq = 0
@@ -434,11 +423,21 @@ function pendingPrimaryInfo(pending) {
   }
 
   if (pending.tool_name === 'cancel_reservation') {
-    const reservationId = pending.params?.reservationId
+    const data = cancelReservationData(pending)
+    const seatDetail = getCachedSeatDetail(data.seatId)
+    const seatLabel = seatDetail?.displayLabel || seatDetail?.seatCode || data.seatCode
+    const title = seatLabel
+      ? `座位 ${seatLabel}`
+      : data.reservationId != null ? `预约 #${data.reservationId}` : '取消当前预约'
+    const metaParts = []
+    if (data.date) metaParts.push(data.date)
+    if (data.startTime && data.endTime) metaParts.push(`${data.startTime}-${data.endTime}`)
+    const durationText = formatReservationDuration(data.startTime, data.endTime)
+    if (durationText) metaParts.push(durationText)
     return {
       eyebrow: '取消预约',
-      title: reservationId != null ? `预约 #${reservationId}` : '取消当前预约',
-      meta: '',
+      title,
+      meta: metaParts.join(' · '),
     }
   }
 
@@ -461,7 +460,7 @@ function pendingSecondaryEntries(pending) {
     return createReservationSecondaryEntries(pending)
   }
   if (pending.tool_name === 'cancel_reservation') {
-    return []
+    return cancelReservationSecondaryEntries(pending)
   }
   return pendingParamEntries(pending).slice(1)
 }
@@ -507,6 +506,23 @@ function createReservationSecondaryEntries(pending) {
   return entries
 }
 
+function cancelReservationSecondaryEntries(pending) {
+  const data = cancelReservationData(pending)
+  const seatDetail = getCachedSeatDetail(data.seatId)
+  const entries = []
+  const roomName = seatDetail?.roomDisplayName || seatDetail?.roomName || data.roomName
+  if (roomName) entries.push({ label: '自习室', value: roomName })
+  if (seatDetail?.seatType) entries.push({ label: '座位类型', value: seatDetail.seatType })
+  const features = []
+  if (seatDetail?.hasPower) features.push('有电源')
+  if (seatDetail?.isWindowSide) features.push('靠窗')
+  if (seatDetail?.isAccessible) features.push('无障碍')
+  if (features.length) entries.push({ label: '特征', value: features.join(' / ') })
+  if (seatDetail?.locationDetail) entries.push({ label: '位置', value: seatDetail.locationDetail })
+  if (data.reservationId != null) entries.push({ label: '预约编号', value: `#${data.reservationId}` })
+  return entries
+}
+
 function formatReservationDuration(startTime, endTime) {
   if (!startTime || !endTime) return ''
   const start = parseClockMinutes(startTime)
@@ -535,8 +551,8 @@ function formatPendingValue(value) {
 }
 
 function normalizeSeatDetailKey(seatId) {
-  const num = Number(seatId)
-  return Number.isInteger(num) && num > 0 ? String(num) : ''
+  const text = String(seatId ?? '').trim()
+  return /^\d+$/.test(text) ? text : ''
 }
 
 function getCachedSeatDetail(seatId) {
@@ -544,16 +560,14 @@ function getCachedSeatDetail(seatId) {
   return key ? pendingSeatDetails[key] || null : null
 }
 
-async function ensurePendingSeatDetail(pending) {
-  if (pending?.tool_name !== 'create_reservation') return
-  const key = normalizeSeatDetailKey(pending.params?.seatId)
+async function ensureSeatDetailById(seatId) {
+  const key = normalizeSeatDetailKey(seatId)
   if (!key || Object.prototype.hasOwnProperty.call(pendingSeatDetails, key) || pendingSeatDetailLoading[key]) {
     return
   }
-
   pendingSeatDetailLoading[key] = true
   try {
-    pendingSeatDetails[key] = await getSeatDetail(Number(key))
+    pendingSeatDetails[key] = await getSeatDetail(key)
   } catch {
     pendingSeatDetails[key] = null
   } finally {
@@ -561,11 +575,79 @@ async function ensurePendingSeatDetail(pending) {
   }
 }
 
+async function ensurePendingSeatDetail(pending) {
+  if (pending?.tool_name !== 'create_reservation') return
+  await ensureSeatDetailById(pending.params?.seatId)
+}
+
+function getCachedReservation(reservationId) {
+  const key = normalizeSeatDetailKey(reservationId)
+  return key ? pendingReservationDetails[key] || null : null
+}
+
+function pickReservationField(record, ...keys) {
+  for (const key of keys) {
+    const value = record?.[key]
+    if (value != null && value !== '') return value
+  }
+  return undefined
+}
+
+function normalizeReservationDetail(record) {
+  if (!record) return null
+  return {
+    id: pickReservationField(record, 'id'),
+    seatId: pickReservationField(record, 'seatId', 'seat_id'),
+    seatCode: pickReservationField(record, 'seatCode', 'seat_code'),
+    roomName: pickReservationField(record, 'roomName', 'room_name'),
+    date: pickReservationField(record, 'date', 'reservation_date'),
+    startTime: pickReservationField(record, 'startTime', 'start_time'),
+    endTime: pickReservationField(record, 'endTime', 'end_time'),
+  }
+}
+
+/** Merge what the card already knows (params) with the reservation looked up by id. */
+function cancelReservationData(pending) {
+  const params = pending?.params || {}
+  const resolved = getCachedReservation(params.reservationId) || {}
+  return {
+    reservationId: params.reservationId,
+    seatId: params.seatId ?? resolved.seatId,
+    seatCode: params.seatCode ?? resolved.seatCode,
+    roomName: params.roomName ?? resolved.roomName,
+    date: params.date ?? resolved.date,
+    startTime: params.startTime ?? resolved.startTime,
+    endTime: params.endTime ?? resolved.endTime,
+  }
+}
+
+async function ensurePendingReservationDetail(pending) {
+  if (pending?.tool_name !== 'cancel_reservation') return
+  const key = normalizeSeatDetailKey(pending.params?.reservationId)
+  if (!key) return
+
+  if (!Object.prototype.hasOwnProperty.call(pendingReservationDetails, key) && !pendingReservationLoading[key]) {
+    pendingReservationLoading[key] = true
+    try {
+      const rec = await getReservationDetail(key)
+      pendingReservationDetails[key] = normalizeReservationDetail(rec)
+    } catch {
+      pendingReservationDetails[key] = null
+    } finally {
+      pendingReservationLoading[key] = false
+    }
+  }
+
+  // Once the seat is known, hydrate seat detail too (type / features / location).
+  const seatId = pendingReservationDetails[key]?.seatId ?? pending.params?.seatId
+  if (seatId != null) await ensureSeatDetailById(seatId)
+}
+
 function hydratePendingCards(messageList) {
   for (const msg of messageList) {
-    if (msg.role === 'pending') {
-      void ensurePendingSeatDetail(msg.pending)
-    }
+    if (msg.role !== 'pending') continue
+    void ensurePendingSeatDetail(msg.pending)
+    void ensurePendingReservationDetail(msg.pending)
   }
 }
 
@@ -996,31 +1078,41 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ai-chat-page {
+  --surface: #ffffff;
+  --canvas:  #fafbfc;
+  --line:    #ecedf1;
+  --text-1:  #1f2329;
+  --text-2:  #5b6170;
+  --text-3:  #9298a5;
+  --hover:   #f2f3f6;
+  --user-bubble: #EDF3FE;   /* 高级灰：用户气泡 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
   display: flex;
   flex-direction: row;
   height: calc(100vh - 72px - 48px);
   min-height: 500px;
-  background: #fff;
-  border-radius: 14px;
-  border: 1px solid #f0f2f8;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
   overflow: hidden;
 }
 
 /* ── Sidebar ── */
 .chat-sidebar {
-  width: 220px;
+  width: 264px;
   flex-shrink: 0;
-  border-right: 1px solid #f0f2f8;
+  border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  background: #f9fafc;
+  background: var(--canvas);
   overflow: hidden;
 }
 
 .sidebar-header {
   padding: 14px 12px;
-  border-bottom: 1px solid #f0f2f8;
   flex-shrink: 0;
 }
 
@@ -1030,27 +1122,30 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 0;
-  background: var(--nt-primary-light);
-  color: var(--nt-primary);
-  border: 1.5px dashed var(--nt-primary-border);
-  border-radius: 8px;
+  padding: 9px 0;
+  background: var(--surface);
+  color: var(--text-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.18s;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.new-conv-btn :deep(.el-icon) {
+  color: var(--nt-primary);
 }
 
 .new-conv-btn:hover {
-  background: var(--nt-primary-light);
-  border-color: var(--nt-primary);
-  border-style: solid;
+  background: var(--hover);
+  border-color: #e0e1e7;
 }
 
 .conv-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 4px 8px 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1058,27 +1153,40 @@ onBeforeUnmount(() => {
 
 .conv-empty {
   font-size: 12px;
-  color: #a0aec0;
+  color: var(--text-3);
   text-align: center;
-  padding: 20px 8px;
+  padding: 24px 8px;
 }
 
 .conv-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 8px 10px 10px;
-  border-radius: 8px;
+  padding: 9px 8px 9px 11px;
+  border-radius: var(--r-sm);
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .conv-item:hover {
-  background: #f0f4fd;
+  background: var(--hover);
 }
 
 .conv-active {
-  background: var(--nt-primary-light) !important;
+  background: var(--hover);
+}
+
+.conv-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 0 2px 2px 0;
+  background: var(--nt-primary);
 }
 
 .conv-item-main {
@@ -1090,9 +1198,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  color: #2d3748;
+  color: var(--text-1);
 }
 
 .conv-item-title-text {
@@ -1107,14 +1215,13 @@ onBeforeUnmount(() => {
 }
 
 .conv-active .conv-item-title {
-  color: var(--nt-primary);
   font-weight: 600;
 }
 
 .conv-item-time {
-  font-size: 11px;
-  color: #a0aec0;
-  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 3px;
 }
 
 .conv-item-more {
@@ -1125,7 +1232,7 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  color: #a0aec0;
+  color: var(--text-3);
   opacity: 0;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
@@ -1136,8 +1243,8 @@ onBeforeUnmount(() => {
 }
 
 .conv-item-more:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #4a5568;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-1);
 }
 
 /* ── Main Chat Column ── */
@@ -1155,8 +1262,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   padding: 16px 24px;
-  border-bottom: 1px solid #f0f2f8;
-  background: #fff;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
   flex-shrink: 0;
 }
 
@@ -1165,10 +1272,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   font-size: 13px;
-  color: #4a5568;
+  color: var(--text-2);
   background: none;
-  border: 1px solid #e8eaf2;
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   padding: 6px 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -1177,8 +1284,8 @@ onBeforeUnmount(() => {
 }
 
 .chat-back-btn:hover {
-  background: var(--nt-primary-light);
-  color: var(--nt-primary-dark);
+  background: var(--hover);
+  color: var(--text-1);
 }
 
 .chat-header-info {
@@ -1189,22 +1296,21 @@ onBeforeUnmount(() => {
 }
 
 .chat-ai-avatar {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: #fff;
-  border: 1.5px solid #e8eaf2;
+  background: var(--surface);
+  border: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .chat-header-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1a202c;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
   display: flex;
   align-items: center;
 }
@@ -1215,9 +1321,8 @@ onBeforeUnmount(() => {
   gap: 4px;
   font-size: 11px;
   font-weight: 500;
-  color: #16a34a;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  color: #1a9d5a;
+  background: #f1faf4;
   border-radius: 10px;
   padding: 1px 8px;
   margin-left: 8px;
@@ -1228,18 +1333,12 @@ onBeforeUnmount(() => {
   height: 6px;
   border-radius: 50%;
   background: #22c55e;
-  animation: pulse-green 2s infinite;
-}
-
-@keyframes pulse-green {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 .chat-header-sub {
-  font-size: 12px;
-  color: #8492a6;
-  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 3px;
 }
 
 .chat-activity-bar {
@@ -1248,31 +1347,31 @@ onBeforeUnmount(() => {
   gap: 8px;
   min-height: 36px;
   padding: 8px 24px;
-  border-bottom: 1px solid #f0f2f8;
-  background: linear-gradient(180deg, #fcfdff 0%, #f8faff 100%);
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
 }
 
 .activity-spinner {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid #dbe4f3;
+  border: 2px solid var(--line);
   border-top-color: var(--nt-primary);
   animation: activity-spin 0.8s linear infinite;
   flex-shrink: 0;
 }
 
 .activity-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: #f59e0b;
+  background: var(--text-3);
 }
 
 .activity-text {
   font-size: 12px;
-  color: #5b6780;
+  color: var(--text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1293,85 +1392,90 @@ onBeforeUnmount(() => {
 
 /* ── Messages ── */
 .chat-messages {
+  --chat-col: 888px;   /* centered reading column; extra space becomes side whitespace */
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: 24px max(24px, calc((100% - var(--chat-col)) / 2));
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  background: #f9fafc;
+  background: var(--canvas);
 }
 
+/* ── Custom scrollbar — slim, light, semi-transparent ── */
+.chat-messages,
+.conv-list {
+  scrollbar-width: thin;                                  /* Firefox */
+  scrollbar-color: rgba(100, 110, 130, 0.28) transparent;
+}
+
+.chat-messages::-webkit-scrollbar,
+.conv-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-track,
+.conv-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb,
+.conv-list::-webkit-scrollbar-thumb {
+  background: rgba(100, 110, 130, 0.25);
+  border-radius: 999px;
+  border: 3px solid transparent;   /* transparent border + clip = slim inset pill */
+  background-clip: padding-box;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover,
+.conv-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 110, 130, 0.42);
+  background-clip: padding-box;
+}
+
+/* Turn-based rhythm: the answer hugs its question, bigger gap between turns. */
 .chat-msg {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  margin-top: 22px;
+}
+
+.chat-msg:first-child {
+  margin-top: 0;
+}
+
+.chat-msg-user + .chat-msg-ai {
+  margin-top: 8px;
+}
+
+.chat-msg-ai + .chat-msg-ai {
+  margin-top: 12px;
 }
 
 .chat-msg-user {
-  flex-direction: row-reverse;
-}
-
-.chat-bubble-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ai-avatar {
-  background: #fff;
-  border: 1.5px solid #e8eaf2;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-}
-
-.user-avatar {
-  background: #e8eaf2;
-  overflow: hidden;
-}
-
-.bubble-avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
+  justify-content: flex-end;
 }
 
 .chat-bubble {
-  max-width: 65%;
-  border-radius: 12px;
-  padding: 12px 16px;
-  position: relative;
-}
-
-.bubble-ai {
-  background: #fff;
-  border: 1px solid #e8eaf2;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  max-width: min(680px, 72%);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
 }
 
 .bubble-user {
-  background: linear-gradient(135deg, var(--nt-primary), var(--nt-primary-dark));
-  color: #fff;
-  border-bottom-right-radius: 4px;
+  background: var(--user-bubble);
+  color: var(--text-1);
+}
+
+/* AI answer: plain text on the canvas — no bubble, no avatar. */
+.ai-answer {
+  max-width: min(720px, 100%);
 }
 
 .bubble-text {
-  font-size: 14px;
-  line-height: 1.65;
-  color: inherit;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-1);
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.bubble-ai .bubble-text {
-  color: #2d3748;
 }
 
 /* Markdown bubble: marked produces real block elements, so disable pre-wrap
@@ -1403,20 +1507,20 @@ onBeforeUnmount(() => {
 .md-body :deep(h3),
 .md-body :deep(h4) {
   margin: 10px 0 6px;
-  font-weight: 700;
-  color: #1a202c;
+  font-weight: 600;
+  color: var(--text-1);
 }
-.md-body :deep(h1) { font-size: 17px; }
-.md-body :deep(h2) { font-size: 16px; }
-.md-body :deep(h3) { font-size: 15px; }
-.md-body :deep(h4) { font-size: 14px; }
+.md-body :deep(h1) { font-size: 18px; }
+.md-body :deep(h2) { font-size: 17px; }
+.md-body :deep(h3) { font-size: 16px; }
+.md-body :deep(h4) { font-size: 15px; }
 .md-body :deep(code) {
-  background: #f4f6fb;
-  border: 1px solid #eef0f6;
+  background: var(--hover);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: 13px;
   color: #c2410c;
 }
 .md-body :deep(pre) {
@@ -1426,7 +1530,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   margin: 8px 0;
   overflow-x: auto;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .md-body :deep(pre code) {
@@ -1441,11 +1545,11 @@ onBeforeUnmount(() => {
   text-decoration: underline;
 }
 .md-body :deep(blockquote) {
-  border-left: 3px solid var(--nt-primary-border);
+  border-left: 3px solid var(--line);
   padding: 2px 0 2px 10px;
   margin: 6px 0;
-  color: #4a5568;
-  background: var(--nt-primary-light);
+  color: var(--text-2);
+  background: var(--hover);
   border-radius: 0 6px 6px 0;
 }
 .md-body :deep(table) {
@@ -1455,18 +1559,18 @@ onBeforeUnmount(() => {
 }
 .md-body :deep(th),
 .md-body :deep(td) {
-  border: 1px solid #e8eaf2;
+  border: 1px solid var(--line);
   padding: 4px 10px;
 }
 .md-body :deep(th) {
-  background: #f8f9fc;
+  background: var(--hover);
   font-weight: 600;
 }
-.md-body :deep(strong) { font-weight: 700; }
+.md-body :deep(strong) { font-weight: 600; }
 .md-body :deep(em) { font-style: italic; }
 .md-body :deep(hr) {
   border: none;
-  border-top: 1px solid #e8eaf2;
+  border-top: 1px solid var(--line);
   margin: 10px 0;
 }
 
@@ -1484,32 +1588,28 @@ onBeforeUnmount(() => {
 
 .bubble-time {
   font-size: 11px;
-  margin-top: 6px;
+  margin-top: 5px;
   text-align: right;
+  color: var(--text-3);
 }
 
-.bubble-ai .bubble-time {
-  color: #a0aec0;
-}
-
-.bubble-user .bubble-time {
-  color: rgba(255,255,255,0.65);
+.ai-answer .bubble-time {
+  text-align: left;
 }
 
 /* Typing dots */
-.bubble-typing {
+.ai-typing {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 14px 18px;
-  min-width: 60px;
+  padding: 4px 0;
 }
 
 .typing-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #a0aec0;
+  background: var(--text-3);
   animation: typing-bounce 1.2s infinite ease-in-out;
 }
 
@@ -1523,29 +1623,26 @@ onBeforeUnmount(() => {
 
 /* ── Pending action card ── */
 .pending-card {
-  max-width: 65%;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 12px;
-  border-bottom-left-radius: 4px;
-  padding: 12px 16px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  max-width: min(680px, 72%);
+  background: #fffdf5;
+  border: 1px solid #f1e4bf;
+  border-radius: var(--r-md);
+  padding: 12px 15px;
 }
 
 .pending-confirmed {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
+  background: #f5fbf7;
+  border-color: #d6ecdc;
 }
 
 .pending-cancelled {
-  background: #f9fafb;
-  border-color: #e5e7eb;
-  opacity: 0.85;
+  background: var(--canvas);
+  border-color: var(--line);
 }
 
 .pending-failed {
-  background: #fff5f5;
-  border-color: #fecaca;
+  background: #fdf6f6;
+  border-color: #f0d6d6;
 }
 
 .pending-header {
@@ -1554,13 +1651,13 @@ onBeforeUnmount(() => {
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #b45309;
+  color: #b07a16;
   margin-bottom: 8px;
 }
 
-.pending-confirmed .pending-header { color: #15803d; }
-.pending-failed .pending-header { color: #dc2626; }
-.pending-cancelled .pending-header { color: #6b7280; }
+.pending-confirmed .pending-header { color: #2f8a52; }
+.pending-failed .pending-header { color: #cc4b4b; }
+.pending-cancelled .pending-header { color: var(--text-3); }
 
 .pending-primary {
   margin-bottom: 12px;
@@ -1569,31 +1666,31 @@ onBeforeUnmount(() => {
 .pending-primary-eyebrow {
   font-size: 12px;
   font-weight: 600;
-  color: #92400e;
+  color: #b07a16;
   margin-bottom: 2px;
 }
 
 .pending-primary-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1a202c;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
   line-height: 1.4;
 }
 
 .pending-primary-meta {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-2);
   margin-top: 4px;
 }
 
-.pending-confirmed .pending-primary-eyebrow { color: #15803d; }
-.pending-failed .pending-primary-eyebrow { color: #dc2626; }
-.pending-cancelled .pending-primary-eyebrow { color: #6b7280; }
+.pending-confirmed .pending-primary-eyebrow { color: #2f8a52; }
+.pending-failed .pending-primary-eyebrow { color: #cc4b4b; }
+.pending-cancelled .pending-primary-eyebrow { color: var(--text-3); }
 
 .pending-detail-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 12px;
 }
 
@@ -1603,20 +1700,19 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  background: rgba(255,255,255,0.55);
-  border: 1px solid rgba(0,0,0,0.05);
-  border-radius: 8px;
+  background: rgba(255,255,255,0.6);
+  border-radius: var(--r-sm);
 }
 
 .pending-detail-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-2);
   flex-shrink: 0;
 }
 
 .pending-detail-value {
   font-size: 12px;
-  color: #1f2937;
+  color: var(--text-1);
   font-weight: 500;
   text-align: right;
   word-break: break-word;
@@ -1635,15 +1731,15 @@ onBeforeUnmount(() => {
   text-align: right;
 }
 
-.pending-status-ok { color: #15803d; }
-.pending-status-failed { color: #dc2626; }
-.pending-status-cancel { color: #6b7280; }
+.pending-status-ok { color: #2f8a52; }
+.pending-status-failed { color: #cc4b4b; }
+.pending-status-cancel { color: var(--text-3); }
 
 /* ── Input Area ── */
 .chat-input-area {
   padding: 16px 24px 20px;
-  border-top: 1px solid #f0f2f8;
-  background: #fff;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
   flex-shrink: 0;
 }
 
@@ -1658,16 +1754,23 @@ onBeforeUnmount(() => {
 }
 
 .chat-input :deep(.el-input__wrapper) {
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px #e8eaf2;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 1px var(--line);
+  background: var(--canvas);
+  transition: box-shadow 0.15s, background 0.15s;
 }
 
 .chat-input :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #d8dae2;
+}
+
+.chat-input :deep(.el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px var(--nt-primary);
+  background: var(--surface);
 }
 
 .chat-send-btn {
-  border-radius: 10px !important;
+  border-radius: var(--r-md) !important;
   padding: 0 24px !important;
   font-weight: 600 !important;
   flex-shrink: 0;
@@ -1675,7 +1778,7 @@ onBeforeUnmount(() => {
 
 .chat-input-tip {
   font-size: 11px;
-  color: #a0aec0;
+  color: var(--text-3);
   margin-top: 8px;
   text-align: center;
 }
