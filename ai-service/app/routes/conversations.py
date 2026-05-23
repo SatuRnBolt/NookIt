@@ -178,13 +178,20 @@ async def _build_message_records(msgs: list, action_logs: list) -> list[MessageV
                         "action_id": action.id,
                         "tool_name": action.action_type,
                         "summary": await _summarize_action(action.action_type, action.request_json or {}),
-                        "params": action.request_json or {},
+                        "params": _serialize_pending_params(action.action_type, action.request_json or {}),
                         "status": _to_pending_card_status(action.action_status),
                     },
                     created_at=action.created_at,
                 )
             )
     return records
+
+
+def _serialize_pending_params(action_type: str, params: dict) -> dict:
+    payload = dict(params)
+    if action_type == "cancel_reservation" and payload.get("reservationId") is not None:
+        payload["reservationId"] = str(payload["reservationId"])
+    return payload
 
 
 async def _summarize_action(action_type: str, args: dict) -> str:

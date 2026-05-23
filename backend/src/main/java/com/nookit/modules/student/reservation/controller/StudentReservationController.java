@@ -3,6 +3,8 @@ package com.nookit.modules.student.reservation.controller;
 import com.nookit.common.annotation.CurrentUser;
 import com.nookit.common.api.PageResult;
 import com.nookit.common.api.Result;
+import com.nookit.common.api.ResultCode;
+import com.nookit.common.exception.BusinessException;
 import com.nookit.modules.student.reservation.dto.CreateReservationReq;
 import com.nookit.modules.student.reservation.service.StudentReservationService;
 import com.nookit.security.UserPrincipal;
@@ -22,6 +24,14 @@ public class StudentReservationController {
 
     private final StudentReservationService studentReservationService;
 
+    private Long parseReservationId(String rawId) {
+        try {
+            return Long.parseLong(rawId);
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "预约 ID 不合法");
+        }
+    }
+
     @GetMapping("/reservations")
     @Operation(summary = "我的预约列表")
     public Result<PageResult<Map<String, Object>>> listMine(
@@ -30,6 +40,13 @@ public class StudentReservationController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String status) {
         return Result.success(studentReservationService.listMyReservations(user.getUserId(), page, pageSize, status));
+    }
+
+    @GetMapping("/reservations/detail")
+    @Operation(summary = "预约详情")
+    public Result<Map<String, Object>> getDetail(@CurrentUser UserPrincipal user,
+                                                 @RequestParam String reservationId) {
+        return Result.success(studentReservationService.getReservationDetail(user.getUserId(), parseReservationId(reservationId)));
     }
 
     @PostMapping("/reservations")

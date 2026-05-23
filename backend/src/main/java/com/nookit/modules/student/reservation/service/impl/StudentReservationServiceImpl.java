@@ -30,6 +30,41 @@ public class StudentReservationServiceImpl implements StudentReservationService 
     private final SeatMapper seatMapper;
     private final RoomMapper roomMapper;
 
+    private Map<String, Object> toReservationView(Reservation reservation,
+                                                  Map<Long, StudyRoom> roomMap,
+                                                  Map<Long, Seat> seatMap) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", reservation.getId());
+
+        StudyRoom room = roomMap.get(reservation.getStudyRoomId());
+        result.put("roomName", room != null ? room.getRoomName() : null);
+        result.put("room_name", room != null ? room.getRoomName() : null);
+
+        Seat seat = seatMap.get(reservation.getSeatId());
+        result.put("seatId", reservation.getSeatId());
+        result.put("seat_id", reservation.getSeatId());
+        result.put("seatCode", seat != null ? seat.getSeatCode() : null);
+        result.put("seat_code", seat != null ? seat.getSeatCode() : null);
+
+        String date = reservation.getReservationDate() != null ? reservation.getReservationDate().toString() : null;
+        result.put("date", date);
+        result.put("reservation_date", date);
+
+        String startTime = reservation.getStartAt() != null ? reservation.getStartAt().toLocalTime().toString().substring(0, 5) : null;
+        String endTime = reservation.getEndAt() != null ? reservation.getEndAt().toLocalTime().toString().substring(0, 5) : null;
+        result.put("startTime", startTime);
+        result.put("start_time", startTime);
+        result.put("endTime", endTime);
+        result.put("end_time", endTime);
+
+        result.put("status", reservation.getReservationStatus());
+        result.put("reservation_status", reservation.getReservationStatus());
+        result.put("checkinCode", reservation.getNotesText());
+        result.put("checkin_code", reservation.getNotesText());
+        result.put("code", reservation.getNotesText());
+        return result;
+    }
+
     @Override
     public PageResult<Map<String, Object>> listMyReservations(Long userId, int page, int pageSize, String status) {
         LambdaQueryWrapper<Reservation> wrapper = new LambdaQueryWrapper<Reservation>()
@@ -48,30 +83,28 @@ public class StudentReservationServiceImpl implements StudentReservationService 
         Map<Long, Seat> seatMap = seatIds.isEmpty() ? Map.of() :
                 seatMapper.selectBatchIds(seatIds).stream().collect(Collectors.toMap(Seat::getId, s -> s));
 
-        List<Map<String, Object>> records = pg.getRecords().stream().map(r -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", r.getId());
-            StudyRoom room = roomMap.get(r.getStudyRoomId());
-            m.put("roomName", room != null ? room.getRoomName() : null);
-            m.put("room_name", room != null ? room.getRoomName() : null);
-            Seat seat = seatMap.get(r.getSeatId());
-            m.put("seatCode", seat != null ? seat.getSeatCode() : null);
-            m.put("seat_code", seat != null ? seat.getSeatCode() : null);
-            m.put("date", r.getReservationDate() != null ? r.getReservationDate().toString() : null);
-            m.put("reservation_date", r.getReservationDate() != null ? r.getReservationDate().toString() : null);
-            String st = r.getStartAt() != null ? r.getStartAt().toLocalTime().toString().substring(0, 5) : null;
-            String et = r.getEndAt()   != null ? r.getEndAt().toLocalTime().toString().substring(0, 5)   : null;
-            m.put("startTime",  st); m.put("start_time", st);
-            m.put("endTime",    et); m.put("end_time",   et);
-            m.put("status", r.getReservationStatus());
-            m.put("reservation_status", r.getReservationStatus());
-            m.put("checkinCode", r.getNotesText());
-            m.put("checkin_code", r.getNotesText());
-            m.put("code", r.getNotesText());
-            return m;
-        }).collect(Collectors.toList());
+        List<Map<String, Object>> records = pg.getRecords().stream()
+                .map(r -> toReservationView(r, roomMap, seatMap))
+                .collect(Collectors.toList());
 
         return PageResult.of(records, pg.getTotal(), pg.getCurrent(), pg.getSize());
+    }
+
+    @Override
+    public Map<String, Object> getReservationDetail(Long userId, Long reservationId) {
+        Reservation reservation = bookingMapper.selectById(reservationId);
+        if (reservation == null || !reservation.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.RESERVATION_NOT_FOUND);
+        }
+
+        StudyRoom room = roomMapper.selectById(reservation.getStudyRoomId());
+        Seat seat = seatMapper.selectById(reservation.getSeatId());
+
+        return toReservationView(
+                reservation,
+                room == null ? Map.of() : Map.of(room.getId(), room),
+                seat == null ? Map.of() : Map.of(seat.getId(), seat)
+        );
     }
 
     @Override

@@ -9,6 +9,8 @@ public interface StudentReservationService {
 
     PageResult<Map<String, Object>> listMyReservations(Long userId, int page, int pageSize, String status);
 
+    Map<String, Object> getReservationDetail(Long userId, Long reservationId);
+
     Map<String, Object> createReservation(Long userId, CreateReservationReq req);
 
     void cancelReservation(Long userId, Long reservationId);

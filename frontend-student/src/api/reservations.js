@@ -8,6 +8,10 @@ export function getMyReservations(query = {}) {
   })
 }
 
+export function getReservationDetail(id) {
+  return get('/api/student/reservations/detail', { reservationId: String(id) })
+}
+
 export function createReservation(data) {
   return post('/api/student/reservations', data)
 }

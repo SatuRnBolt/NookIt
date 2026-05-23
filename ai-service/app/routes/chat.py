@@ -60,6 +60,13 @@ class CancelPendingActionResponse(BaseModel):
     status: str
 
 
+def _serialize_pending_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(params)
+    if tool_name == "cancel_reservation" and payload.get("reservationId") is not None:
+        payload["reservationId"] = str(payload["reservationId"])
+    return payload
+
+
 # --- non-streaming endpoint ------------------------------------------------
 
 
@@ -128,7 +135,10 @@ def _to_response(conv: AiConversation, result: ChatResult) -> ChatResponse:
     if result.pending_action is not None:
         p = result.pending_action
         pending_vo = PendingActionVO(
-            action_id=p.action_id, tool_name=p.tool_name, summary=p.summary, params=p.params
+            action_id=p.action_id,
+            tool_name=p.tool_name,
+            summary=p.summary,
+            params=_serialize_pending_params(p.tool_name, p.params),
         )
     return ChatResponse(conversation_id=conv.id, reply=result.reply, pending_action=pending_vo)
 

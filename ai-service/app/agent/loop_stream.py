@@ -47,6 +47,13 @@ from app.models import AiActionLog, AiConversation
 logger = logging.getLogger(__name__)
 
 
+def _serialize_pending_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(params)
+    if tool_name == "cancel_reservation" and payload.get("reservationId") is not None:
+        payload["reservationId"] = str(payload["reservationId"])
+    return payload
+
+
 # --- public entry points --------------------------------------------------
 
 
@@ -257,7 +264,7 @@ async def _drive_loop_stream(
                     "action_id": action.id,
                     "tool_name": tool.name,
                     "summary": summary_text,
-                    "params": args,
+                    "params": _serialize_pending_params(tool.name, args),
                 }
                 halted = True
                 continue
