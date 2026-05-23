@@ -686,6 +686,8 @@ CREATE TABLE ai_conversations (
   session_token VARCHAR(128) NOT NULL,
   conversation_title VARCHAR(128) NULL,
   conversation_status ENUM('active', 'closed', 'archived') NOT NULL DEFAULT 'active',
+  is_pinned TINYINT(1) NOT NULL DEFAULT 0,
+  pinned_at DATETIME NULL,
   context_json JSON NULL,
   last_message_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
