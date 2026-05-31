@@ -320,7 +320,7 @@ const MAX_SLOTS  = 8  // 最多 4 小时 = 8 个半小时槽
 function slotLabel(n) {
   const h = SLOT_START + Math.floor(n / 2)
   const m = n % 2 === 0 ? '00' : '30'
-  return `${h}:${m}`
+  return `${String(h).padStart(2, '0')}:${m}`
 }
 
 const showBookModal = ref(false)
