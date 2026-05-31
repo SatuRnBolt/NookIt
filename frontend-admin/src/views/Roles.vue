@@ -27,7 +27,7 @@
               <div class="role-desc">{{ role.description }}</div>
               <div class="role-actions" @click.stop>
                 <el-button link size="small" @click="openRoleDialog(role)">编辑</el-button>
-                <el-button link size="small" type="danger" @click="deleteRole(role)" :disabled="role.id === 1">删除</el-button>
+                <el-button link size="small" type="danger" @click="deleteRole(role)" :disabled="role.name === SUPER_ROLE_NAME">删除</el-button>
               </div>
             </div>
           </div>
@@ -57,22 +57,25 @@
             <div class="perm-grid">
               <div
                 v-for="perm in allPermissions"
-                :key="perm.key"
+                :key="perm.code"
                 class="perm-item"
-                :class="{ enabled: editingPerms.includes(perm.key), disabled: selectedRole.id === 1 }"
-                @click="selectedRole.id !== 1 && togglePerm(perm.key)"
+                :class="{ enabled: editingPerms.includes(perm.code), disabled: isSuperRole }"
+                @click="!isSuperRole && togglePerm(perm.code)"
               >
                 <div class="perm-check">
-                  <el-icon v-if="editingPerms.includes(perm.key)" color="#4f6ef7" :size="20">
+                  <el-icon v-if="editingPerms.includes(perm.code)" color="#4f6ef7" :size="20">
                     <SuccessFilled />
                   </el-icon>
                   <div v-else class="perm-empty-check"></div>
                 </div>
-                <div class="perm-label">{{ perm.label }}</div>
+                <div class="perm-label">
+                  <span class="perm-name">{{ perm.name || perm.code }}</span>
+                  <span class="perm-code">{{ perm.code }}</span>
+                </div>
               </div>
             </div>
 
-            <div v-if="selectedRole.id === 1" class="super-notice">
+            <div v-if="isSuperRole" class="super-notice">
               <el-icon><Warning /></el-icon>
               超级管理员拥有全部权限，不可修改
             </div>
@@ -110,6 +113,10 @@ const editingPerms = ref([])
 const roleForm = reactive({ name: '', description: '' })
 
 const selectedRole = computed(() => roles.value.find(r => r.id === selectedRoleId.value))
+
+// 角色主键为雪花 ID（字符串），不能再用 id===1 判断系统管理员
+const SUPER_ROLE_NAME = '系统管理员'
+const isSuperRole = computed(() => selectedRole.value?.name === SUPER_ROLE_NAME)
 
 watch(selectedRole, (role) => {
   editingPerms.value = role ? [...(role.permissions || [])] : []
@@ -293,9 +300,22 @@ async function deleteRole(role) {
 }
 
 .perm-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.perm-name {
   font-size: 13px;
   font-weight: 500;
   color: #374151;
+}
+
+.perm-code {
+  font-size: 11px;
+  color: #9ca3af;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .super-notice {
