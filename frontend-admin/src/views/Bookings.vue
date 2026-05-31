@@ -33,10 +33,11 @@
         <div class="filter-left">
           <el-input v-model="search" placeholder="搜索学生姓名/学号" prefix-icon="Search" clearable style="width:200px" />
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width:120px">
-            <el-option label="待签到" value="confirmed" />
-            <el-option label="已签到" value="checkedin" />
+            <el-option label="待签到" value="pending_checkin" />
+            <el-option label="已签到" value="checked_in" />
+            <el-option label="已完成" value="completed" />
             <el-option label="已取消" value="cancelled" />
-            <el-option label="已违约" value="missed" />
+            <el-option label="已违约" value="violated" />
           </el-select>
           <el-date-picker
             v-model="dateFilter"
@@ -56,7 +57,11 @@
     <!-- Table Card -->
     <div class="content-card">
       <el-table :data="bookings" stripe style="width:100%">
-        <el-table-column prop="id" label="ID" width="64" />
+        <el-table-column prop="reservationNo" label="预约编号" min-width="124">
+          <template #default="{ row }">
+            <span class="reservation-no">{{ row.reservationNo || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="学生" min-width="130">
           <template #default="{ row }">
             <div class="student-name">{{ row.studentName }}</div>
@@ -80,8 +85,9 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <div style="display: flex; gap: 8px;">
-              <el-button v-if="row.status === 'confirmed'" link type="success" @click="manualCheckIn(row)">手动签到</el-button>
-              <el-button v-if="row.status === 'confirmed'" link type="danger" @click="cancelBooking(row)">取消预约</el-button>
+              <el-button v-if="row.status === 'pending_checkin'" link type="success" @click="manualCheckIn(row)">手动签到</el-button>
+              <el-button v-if="row.status === 'pending_checkin'" link type="danger" @click="cancelBooking(row)">取消预约</el-button>
+              <span v-if="row.status !== 'pending_checkin'" class="no-action">—</span>
             </div>
           </template>
         </el-table-column>
@@ -156,11 +162,23 @@ function switchTab(val) {
 }
 
 function statusText(s) {
-  return { confirmed: '待签到', checkedin: '已签到', cancelled: '已取消', missed: '已违约' }[s] || s
+  return {
+    pending_checkin: '待签到',
+    checked_in: '已签到',
+    completed: '已完成',
+    cancelled: '已取消',
+    violated: '已违约',
+  }[s] || s
 }
 
 function statusTagType(s) {
-  return { confirmed: 'primary', checkedin: 'success', cancelled: 'info', missed: 'danger' }[s] || ''
+  return {
+    pending_checkin: 'warning',
+    checked_in: 'success',
+    completed: 'info',
+    cancelled: 'info',
+    violated: 'danger',
+  }[s] || ''
 }
 
 async function cancelBooking(b) {
@@ -343,6 +361,8 @@ async function manualCheckIn(b) {
 
 .student-name { font-size: 13.5px; font-weight: 600; color: #111827; }
 .student-id   { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.reservation-no { font-size: 12.5px; font-weight: 600; color: #475569; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.no-action { color: #cbd5e1; }
 
 .pagination-bar {
   display: flex;

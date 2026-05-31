@@ -96,6 +96,7 @@ const tabs = [
   { label: '待签到', value: 'pending_checkin' },
   { label: '已签到', value: 'checked_in' },
   { label: '已完成', value: 'completed' },
+  { label: '已违约', value: 'violated' },
   { label: '已取消', value: 'cancelled' },
 ]
 

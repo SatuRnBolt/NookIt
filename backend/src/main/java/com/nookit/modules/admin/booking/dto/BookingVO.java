@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public class BookingVO {
 
     private Long id;
+    private String reservationNo;
     private String studentName;
     private String studentId;
     private String roomName;

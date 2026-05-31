@@ -7,6 +7,7 @@
     <select id="pageBookings" resultType="com.nookit.modules.admin.booking.dto.BookingVO">
         SELECT
             r.id,
+            r.reservation_no AS reservationNo,
             u.full_name AS studentName,
             COALESCE(u.student_no, u.employee_no) AS studentId,
             COALESCE(sr.display_name, sr.room_name) AS roomName,
