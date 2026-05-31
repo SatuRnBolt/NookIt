@@ -40,7 +40,7 @@
             v-if="!mapLoading && seats.length > 0"
           >
             <div
-              v-for="seat in filteredSeats"
+              v-for="seat in seats"
               :key="seat.id"
               class="seat-block"
               :class="{
@@ -48,6 +48,7 @@
                 'seat-occupied': isSeatOccupied(seat),
                 'seat-maintenance': isSeatMaintenance(seat),
                 'seat-selected': selectedSeat?.id === seat.id,
+                'seat-dimmed': isSeatDimmed(seat),
               }"
               :style="seatStyle(seat)"
               :title="seat.display_label || seat.seat_code"
@@ -190,12 +191,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Select, Close } from '@element-plus/icons-vue'
 import { getRoomDetail, getSeatMap, getSeatSlots } from '../api/rooms'
 import { createReservation } from '../api/reservations'
+import defaultClassroomBg from '../assets/classroom_background.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -207,57 +209,101 @@ const selectedSeat = ref(null)
 const mapLoading = ref(false)
 const filterPower = ref(false)
 const filterWindow = ref(false)
+const mapContainer = ref(null)
 
 const MAP_W = ref(1200)
 const MAP_H = ref(800)
 const SCALE = ref(1)
+const containerW = ref(0)
+const mapBg = ref('')   // 教室背景图
+
+// 后端字段命名混用（snake_case / camelCase），归一化为统一字段
+function normalizeSeat(s) {
+  const pick = (...keys) => {
+    for (const k of keys) if (s[k] !== undefined && s[k] !== null) return s[k]
+    return undefined
+  }
+  const status = pick('seat_status', 'seatStatus', 'status') ?? 'active'
+  const bookable = pick('is_bookable', 'isBookable')
+  return {
+    ...s,
+    seat_code: pick('seat_code', 'seatCode'),
+    display_label: pick('display_label', 'displayLabel') ?? pick('seat_code', 'seatCode'),
+    map_x: Number(pick('map_x', 'mapX') ?? 0),
+    map_y: Number(pick('map_y', 'mapY') ?? 0),
+    map_width: Number(pick('map_width', 'mapWidth') ?? 48),
+    map_height: Number(pick('map_height', 'mapHeight') ?? 48),
+    map_rotation: Number(pick('map_rotation', 'mapRotation') ?? 0),
+    seat_status: status,
+    is_bookable: bookable === undefined ? true : Boolean(bookable),
+    has_power: Boolean(pick('has_power', 'hasPower')),
+    is_window_side: Boolean(pick('is_window_side', 'nearWindow', 'isWindowSide')),
+    is_accessible: Boolean(pick('is_accessible', 'accessible', 'isAccessible')),
+    occupied: Boolean(pick('occupied')),
+  }
+}
+
+const scaledW = computed(() => Math.round(MAP_W.value * SCALE.value))
+const scaledH = computed(() => Math.round(MAP_H.value * SCALE.value))
 
 const mapStyle = computed(() => ({
   width: MAP_W.value + 'px',
   height: MAP_H.value + 'px',
   transform: `scale(${SCALE.value})`,
   transformOrigin: 'top left',
+  // 缩放后若有富余宽度则水平居中
+  marginLeft: Math.max(0, (containerW.value - 32 - scaledW.value) / 2) + 'px',
+  // 教室背景图（contain 不裁切不变形），座位叠在其上
+  ...(mapBg.value
+    ? {
+        backgroundImage: `url(${mapBg.value})`,
+        backgroundSize: 'contain',
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'center',
+      }
+    : {}),
 }))
 
-// 容器尺寸精确匹配缩放后的地图，不留空白
+// 容器高度匹配缩放后的地图；宽度由 flex 布局撑满
 const containerStyle = computed(() => ({
-  width:  Math.round(MAP_W.value * SCALE.value) + 32 + 'px',
-  height: Math.round(MAP_H.value * SCALE.value) + 32 + 'px',
+  height: scaledH.value + 32 + 'px',
 }))
 
 const availableCount = computed(() =>
   seats.value.filter(s => isSeatAvailable(s)).length
 )
 
-const filteredSeats = computed(() => {
-  return seats.value.filter(s => {
-    if (filterPower.value && !(s.has_power || s.hasPower)) return false
-    if (filterWindow.value && !(s.is_window_side || s.nearWindow)) return false
-    return true
-  })
-})
+const anyFilterActive = computed(() => filterPower.value || filterWindow.value)
+
+function seatMatchesFilter(seat) {
+  if (filterPower.value && !seat.has_power) return false
+  if (filterWindow.value && !seat.is_window_side) return false
+  return true
+}
+
+function isSeatDimmed(seat) {
+  return anyFilterActive.value && !seatMatchesFilter(seat)
+}
 
 function isSeatAvailable(seat) {
-  const status = seat.seat_status || seat.seatStatus || seat.status
-  const bookable = seat.is_bookable !== undefined ? seat.is_bookable : (seat.isBookable !== undefined ? seat.isBookable : true)
-  return status === 'active' && bookable
+  return seat.seat_status === 'active' && seat.is_bookable
 }
 
 function isSeatOccupied(seat) {
-  return seat.occupied || false
+  return seat.occupied
 }
 
 function isSeatMaintenance(seat) {
-  const status = seat.seat_status || seat.seatStatus || seat.status
-  return status === 'maintenance'
+  return seat.seat_status === 'maintenance'
 }
 
 function seatStyle(seat) {
   return {
-    left: (seat.map_x || seat.mapX || 0) + 'px',
-    top: (seat.map_y || seat.mapY || 0) + 'px',
-    width: (seat.map_width || seat.mapWidth || 48) + 'px',
-    height: (seat.map_height || seat.mapHeight || 48) + 'px',
+    left: seat.map_x + 'px',
+    top: seat.map_y + 'px',
+    width: seat.map_width + 'px',
+    height: seat.map_height + 'px',
+    transform: seat.map_rotation ? `rotate(${seat.map_rotation}deg)` : undefined,
   }
 }
 
@@ -361,12 +407,25 @@ watch(selectedDate, async (d) => {
   }
 })
 
+// 后端可能返回不存在的背景图路径（如 /static/...），加载失败则回退到默认教室图
+function resolveBackground(url) {
+  mapBg.value = defaultClassroomBg
+  if (!url) return
+  const img = new Image()
+  img.onload = () => { mapBg.value = url }
+  img.onerror = () => { mapBg.value = defaultClassroomBg }
+  img.src = url
+}
+
 function computeScale() {
-  const container = document.querySelector('.seatmap-container')
-  if (container) {
-    const cw = container.clientWidth - 32
-    SCALE.value = Math.min(0.65, cw / MAP_W.value)
-  }
+  const el = mapContainer.value
+  if (!el) return
+  containerW.value = el.clientWidth
+  const availW = el.clientWidth - 32
+  // 适应宽度，但限制最大放大倍数与可视高度，避免过大
+  const maxByHeight = (window.innerHeight * 0.72) / MAP_H.value
+  const s = Math.min(availW / MAP_W.value, 1.15, maxByHeight)
+  SCALE.value = Math.max(0.2, s)
 }
 
 async function fetchData() {
@@ -377,9 +436,11 @@ async function fetchData() {
       getSeatMap(roomId, new Date().toISOString().slice(0, 10)),
     ])
     room.value = roomData
-    seats.value = mapData.seats || []
+    seats.value = (mapData.seats || []).map(normalizeSeat)
     MAP_W.value = mapData.map_width || mapData.mapWidth || 1200
     MAP_H.value = mapData.map_height || mapData.mapHeight || 800
+    // 未设置或后端图加载失败时回退到默认教室图
+    resolveBackground(mapData.background_url || mapData.backgroundUrl)
     await nextTick()
     computeScale()
   } catch {
@@ -392,6 +453,10 @@ async function fetchData() {
 onMounted(() => {
   fetchData()
   window.addEventListener('resize', computeScale)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', computeScale)
 })
 </script>
 
@@ -419,17 +484,16 @@ onMounted(() => {
   display: flex;
   gap: 24px;
   align-items: flex-start;
-  justify-content: center;
 }
 
 /* Seat Map Panel */
 .seatmap-panel {
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0,56,147,0.06);
   overflow: hidden;
-  width: fit-content;
 }
 
 .seatmap-toolbar {
@@ -472,6 +536,7 @@ onMounted(() => {
 }
 
 .seatmap-container {
+  position: relative;
   padding: 16px;
   overflow: hidden;
 }
@@ -485,27 +550,29 @@ onMounted(() => {
 
 .seat-block {
   position: absolute;
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: clamp(11px, 1vw, 15px);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
   user-select: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 
 .seat-available {
   background: #e1f3d8;
-  color: #529b2e;
+  color: #3d7a1f;
   border: 1px solid #b3e19d;
 }
 
 .seat-available:hover {
-  background: #b3e19d;
+  background: #c7e8b3;
   transform: scale(1.08);
-  z-index: 2;
+  box-shadow: 0 4px 12px rgba(82,155,46,0.25);
+  z-index: 4;
 }
 
 .seat-occupied {
@@ -526,8 +593,23 @@ onMounted(() => {
   background: #d9ecff;
   color: #003893;
   border: 2px solid #003893;
-  box-shadow: 0 0 0 3px rgba(0,56,147,0.15);
-  z-index: 3;
+  box-shadow: 0 0 0 3px rgba(0,56,147,0.18), 0 6px 16px rgba(0,56,147,0.25);
+  z-index: 5;
+}
+
+/* 筛选未命中：淡化但保持布局 */
+.seat-dimmed {
+  opacity: 0.28;
+  filter: saturate(0.5);
+}
+
+.seat-dimmed:hover {
+  opacity: 0.55;
+}
+
+.seat-selected.seat-dimmed {
+  opacity: 1;
+  filter: none;
 }
 
 /* Info Panel */
