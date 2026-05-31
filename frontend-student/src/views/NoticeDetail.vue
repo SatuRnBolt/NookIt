@@ -10,7 +10,7 @@
     <div class="content-card" v-if="notice">
       <h2>{{ notice.title }}</h2>
       <div class="detail-meta">
-        <span>{{ notice.published_at || notice.publishedAt || '' }}</span>
+        <span>{{ formatDateTime(notice.published_at || notice.publishedAt || notice.created_at) }}</span>
         <el-tag size="small">{{ notice.notice_type || notice.type || '' }}</el-tag>
         <span v-if="notice.author_name || notice.authorName">
           发布人：{{ notice.author_name || notice.authorName }}
@@ -38,6 +38,13 @@ const renderedContent = computed(() => {
   if (!notice.value) return ''
   return (notice.value.content || '').replace(/\n/g, '<br>')
 })
+
+function formatDateTime(value) {
+  if (!value) return '-'
+  return String(value)
+    .replace('T', ' ')
+    .replace(/\.\d+$/, '')
+}
 
 onMounted(async () => {
   loading.value = true

@@ -251,7 +251,7 @@
               </div>
             </div>
             <div v-if="layoutMode === 'edit'" class="edit-hint">
-              开启“新增座位”后，点击画布空白处即可落点
+              直接拖拽座位即可调整位置；开启“新增座位”后点击空白处可落点
             </div>
           </div>
 
@@ -278,10 +278,15 @@
                 class="seat-node"
                 :class="[
                   `seat-${seat.seat_status}`,
-                  { selected: selectedSeat?.id === seat.id, unbookable: !seat.is_bookable }
+                  {
+                    selected: selectedSeat?.id === seat.id,
+                    unbookable: !seat.is_bookable,
+                    dragging: draggingSeatId === seat.id,
+                  }
                 ]"
                 :style="seatStyle(seat)"
                 @click.stop="selectSeat(seat)"
+                @mousedown.stop="startDragSeat(seat, $event)"
               >
                 <span class="seat-node-label">{{ seat.display_label }}</span>
                 <span class="seat-node-code">{{ seat.seat_code }}</span>
@@ -376,31 +381,6 @@
                   <el-option label="研讨座" value="group" />
                 </el-select>
               </el-form-item>
-
-              <div class="seat-grid">
-                <el-form-item label="行号">
-                  <el-input-number v-model="seatForm.row_no" :min="1" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="列号">
-                  <el-input-number v-model="seatForm.col_no" :min="1" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-              </div>
-
-              <div class="seat-grid">
-                <el-form-item label="X 坐标">
-                  <el-input-number v-model="seatForm.map_x" :min="0" :step="5" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="Y 坐标">
-                  <el-input-number v-model="seatForm.map_y" :min="0" :step="5" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-              </div>
-
-              <div v-if="layoutMode === 'edit'" class="nudge-row">
-                <el-button @click="nudgeSeat(0, -10)">上移</el-button>
-                <el-button @click="nudgeSeat(-10, 0)">左移</el-button>
-                <el-button @click="nudgeSeat(10, 0)">右移</el-button>
-                <el-button @click="nudgeSeat(0, 10)">下移</el-button>
-              </div>
 
               <div class="seat-grid">
                 <el-form-item label="宽度">
@@ -577,7 +557,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch, onMounted } from 'vue'
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRooms, createRoom, updateRoom, deleteRoom as deleteRoomApi, updateRoomStatus, getSeatMap } from '../api/rooms'
 
@@ -598,6 +578,7 @@ const onlyBookable = ref(false)
 const layoutMode = ref('view')
 const addSeatMode = ref(false)
 const mapStageRef = ref(null)
+const draggingSeatId = ref(null)
 
 const campusOptions = ['邯郸校区', '枫林校区', '江湾校区', '张江校区']
 const orgOptions = ['计算机学院', '信息工程学院', '数学学院', '物理学院', '化学学院', '医学院', '人文学院', '经济学院']
@@ -1027,10 +1008,62 @@ function onMapStageClick(event) {
   ElMessage.success('新座位已添加到布局草稿')
 }
 
-function nudgeSeat(dx, dy) {
-  seatForm.map_x = Math.max(0, seatForm.map_x + dx)
-  seatForm.map_y = Math.max(0, seatForm.map_y + dy)
+// ── 座位拖拽摆放 ──
+// map-stage 为 1:1 自然尺寸（非缩放），鼠标位移即像素位移
+let dragState = null
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(value, max))
 }
+
+function startDragSeat(seat, event) {
+  if (layoutMode.value !== 'edit' || addSeatMode.value || !currentSeatMap.value) return
+  selectSeat(seat)
+  dragState = {
+    seat,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: Number(seat.map_x),
+    originY: Number(seat.map_y),
+    moved: false,
+  }
+  document.addEventListener('mousemove', onDragMove)
+  document.addEventListener('mouseup', endDragSeat)
+}
+
+function onDragMove(event) {
+  if (!dragState) return
+  const dx = event.clientX - dragState.startX
+  const dy = event.clientY - dragState.startY
+  if (!dragState.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+    dragState.moved = true
+    draggingSeatId.value = dragState.seat.id
+  }
+  if (!dragState.moved) return
+  const seat = dragState.seat
+  const maxX = (currentSeatMap.value.map_width || 0) - Number(seat.map_width)
+  const maxY = (currentSeatMap.value.map_height || 0) - Number(seat.map_height)
+  seat.map_x = Math.round(clamp(dragState.originX + dx, 0, Math.max(0, maxX)))
+  seat.map_y = Math.round(clamp(dragState.originY + dy, 0, Math.max(0, maxY)))
+  // 同步表单（坐标不展示，但保存/复制仍需）
+  if (selectedSeat.value?.id === seat.id) {
+    seatForm.map_x = seat.map_x
+    seatForm.map_y = seat.map_y
+  }
+}
+
+function endDragSeat() {
+  document.removeEventListener('mousemove', onDragMove)
+  document.removeEventListener('mouseup', endDragSeat)
+  if (dragState?.moved) markMapDraft()
+  draggingSeatId.value = null
+  dragState = null
+}
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onDragMove)
+  document.removeEventListener('mouseup', endDragSeat)
+})
 
 function duplicateSeat() {
   if (!selectedSeat.value || !currentSeatMap.value) return
@@ -1405,24 +1438,24 @@ async function deleteRoom(room) {
   min-width: max-content;
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.99)),
     repeating-linear-gradient(
       90deg,
-      rgba(148, 163, 184, 0.08) 0,
-      rgba(148, 163, 184, 0.08) 1px,
+      rgba(148, 163, 184, 0.04) 0,
+      rgba(148, 163, 184, 0.04) 1px,
       transparent 1px,
-      transparent 48px
+      transparent 40px
     ),
     repeating-linear-gradient(
       0deg,
-      rgba(148, 163, 184, 0.08) 0,
-      rgba(148, 163, 184, 0.08) 1px,
+      rgba(148, 163, 184, 0.04) 0,
+      rgba(148, 163, 184, 0.04) 1px,
       transparent 1px,
-      transparent 48px
+      transparent 40px
     );
   background-size: cover;
   background-position: center;
-  border: 1px solid #dbe3f0;
+  border: 1px solid #e3e9f3;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
@@ -1470,19 +1503,35 @@ async function deleteRoom(room) {
   border-radius: 10px;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.map-stage.editable .seat-node {
+  cursor: grab;
 }
 
 .seat-node:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
+  z-index: 4;
 }
 
 .seat-node.selected {
-  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline: 3px solid rgba(37, 99, 235, 0.22);
   border-color: #2563eb;
-  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+  z-index: 5;
+}
+
+.seat-node.dragging {
+  cursor: grabbing;
+  transform: scale(1.06);
+  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.3);
+  opacity: 0.92;
+  z-index: 9;
+  transition: none;
 }
 
 .seat-node.unbookable::after {
@@ -1620,13 +1669,6 @@ async function deleteRoom(room) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-}
-
-.nudge-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
 }
 
 .feature-list {

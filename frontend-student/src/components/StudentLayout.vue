@@ -68,6 +68,19 @@
           <div v-if="showPicker" class="theme-backdrop" @click="showPicker = false"></div>
         </div>
 
+        <div class="nav-notice-wrap">
+          <button
+            class="nav-notice-btn"
+            :class="{ active: isActive('/notices') }"
+            @click="router.push('/notices')"
+            :aria-label="noticeEnabled ? '消息通知已开启' : '消息通知已关闭'"
+            :title="noticeEnabled ? '消息通知已开启' : '消息通知已关闭'"
+          >
+            <el-icon :size="18"><Bell /></el-icon>
+            <span v-if="noticeEnabled" class="notice-dot"></span>
+          </button>
+        </div>
+
         <div class="nav-user">
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-trigger">
@@ -103,7 +116,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStudentAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
@@ -115,6 +128,35 @@ const router = useRouter()
 const auth = useStudentAuthStore()
 const themeStore = useThemeStore()
 const showPicker = ref(false)
+const SETTINGS_KEY = 'student_profile_settings'
+const noticeEnabled = ref(true)
+
+function syncNoticeSetting() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) {
+      noticeEnabled.value = true
+      return
+    }
+    const parsed = JSON.parse(raw)
+    noticeEnabled.value = parsed.notification !== false
+  } catch {
+    noticeEnabled.value = true
+  }
+}
+
+function handleNoticeSettingChanged() {
+  syncNoticeSetting()
+}
+
+onMounted(() => {
+  syncNoticeSetting()
+  window.addEventListener('student-settings-changed', handleNoticeSettingChanged)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('student-settings-changed', handleNoticeSettingChanged)
+})
 
 function selectTheme(id) {
   themeStore.setTheme(id)
@@ -355,6 +397,50 @@ async function handleCommand(cmd) {
   position: fixed;
   inset: 0;
   z-index: 299;
+}
+
+.nav-notice-wrap {
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.nav-notice-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1.5px solid #e8eaf2;
+  border-radius: 10px;
+  color: #8492a6;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.nav-notice-btn:hover {
+  background: var(--nt-primary-light);
+  color: var(--nt-primary);
+  border-color: var(--nt-primary-border);
+}
+
+.nav-notice-btn.active {
+  background: var(--nt-primary-light);
+  color: var(--nt-primary-dark);
+  border-color: var(--nt-primary-border);
+}
+
+.notice-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.22);
 }
 
 .nav-ai-icon {

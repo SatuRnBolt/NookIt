@@ -39,7 +39,7 @@
             <div class="item-body">
               <div class="item-title">{{ item.title }}</div>
               <div class="item-meta">
-                <span>{{ item.published_at || item.publishedAt || item.created_at || '' }}</span>
+                <span>{{ formatDateTime(item.published_at || item.publishedAt || item.created_at) }}</span>
                 <el-tag size="small" :type="noticeTypeTag(item)">{{ noticeTypeText(item) }}</el-tag>
               </div>
             </div>
@@ -53,7 +53,7 @@
         <div class="detail-article">
           <h2>{{ selectedNotice.title }}</h2>
           <div class="detail-meta">
-            <span>{{ selectedNotice.published_at || selectedNotice.publishedAt || '' }}</span>
+            <span>{{ formatDateTime(selectedNotice.published_at || selectedNotice.publishedAt || selectedNotice.created_at) }}</span>
             <el-tag size="small" :type="noticeTypeTag(selectedNotice)">
               {{ noticeTypeText(selectedNotice) }}
             </el-tag>
@@ -94,6 +94,13 @@ const renderedContent = computed(() => {
   const content = selectedNotice.value.content || ''
   return content.replace(/\n/g, '<br>')
 })
+
+function formatDateTime(value) {
+  if (!value) return '-'
+  return String(value)
+    .replace('T', ' ')
+    .replace(/\.\d+$/, '')
+}
 
 function noticeTypeText(item) {
   const type = item.notice_type || item.type || ''
