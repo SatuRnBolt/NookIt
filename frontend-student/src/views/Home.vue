@@ -30,7 +30,7 @@
               @click="search = tag"
             >{{ tag }} ›</span>
           </div>
-          <button class="back-home-btn" @click="router.push('/bookings')">
+          <button class="back-home-btn" @click="router.push('/reservations')">
             <span class="btn-icon">↩</span> 我的预约记录
           </button>
         </div>
@@ -122,7 +122,7 @@
           v-for="booking in displayBookings"
           :key="booking.id"
           class="booking-card"
-          @click="router.push('/bookings')"
+          @click="router.push('/reservations')"
         >
           <div class="booking-card-icon" :style="{ background: bookingGradient(booking.id) }">
             <el-icon :size="30" color="rgba(255,255,255,0.9)"><OfficeBuilding /></el-icon>
@@ -193,11 +193,11 @@
               <div class="room-row-meta">
                 <el-tag
                   size="small"
-                  :type="(room.room_status || room.status) === 'active' ? 'success' : 'info'"
+                  :type="statusOf(room) === 'active' ? 'success' : 'info'"
                   effect="light"
                   round
                   class="room-tag"
-                >{{ (room.room_status || room.status) === 'active' ? '开放中' : '维护中' }}</el-tag>
+                >{{ statusOf(room) === 'active' ? '开放中' : '维护中' }}</el-tag>
                 <span class="room-row-sub">
                   <el-icon :size="12"><View /></el-icon>
                   {{ room.availableSeats ?? room.available_seats ?? 0 }}/{{ room.totalCapacity ?? room.total_capacity ?? 0 }} 座
@@ -285,17 +285,22 @@ function bookingGradient(id) {
 }
 
 const pendingCount = computed(() =>
-  myBookings.value.filter(b => b.status === 'pending' || b.status === 'confirmed').length
+  myBookings.value.filter(b => statusOf(b) === 'pending_checkin').length
 )
 
 const todayCount = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
-  return myBookings.value.filter(b => (b.date || b.bookingDate || '').startsWith(today)).length
+  return myBookings.value.filter(b => (b.date || b.reservation_date || b.bookingDate || '').startsWith(today)).length
 })
 
 const availableRooms = computed(() =>
-  rooms.value.filter(r => (r.room_status || r.status) === 'active').length
+  rooms.value.filter(r => statusOf(r) === 'active').length
 )
+
+/** 统一取状态：后端可能 camelCase(roomStatus) / snake_case(room_status) */
+function statusOf(obj) {
+  return obj.roomStatus ?? obj.room_status ?? obj.status ?? obj.reservation_status
+}
 
 const totalAvailableSeats = computed(() =>
   rooms.value.reduce((sum, r) => sum + (r.availableSeats ?? r.available_seats ?? 0), 0)

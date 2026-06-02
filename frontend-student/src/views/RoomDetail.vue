@@ -380,7 +380,7 @@ async function handleSubmit() {
   submitting.value = true
   try {
     await createReservation({
-      seatId:     Number(selectedSeat.value.id),
+      seatId:     selectedSeat.value.id,
       date:       selectedDate.value,
       startTime:  slotLabel(bookStart.value),
       endTime:    slotLabel(bookEnd.value),
