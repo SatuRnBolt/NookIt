@@ -14,4 +14,6 @@ public interface StudentReservationService {
     Map<String, Object> createReservation(Long userId, CreateReservationReq req);
 
     void cancelReservation(Long userId, Long reservationId);
+
+    Map<String, Object> checkinByCode(Long userId, String code);
 }

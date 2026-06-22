@@ -59,8 +59,9 @@ public enum ResultCode {
     RESERVATION_OUT_OF_RANGE(50003, "预约时长超出限制"),
     RESERVATION_PAST_TIME(50004, "不能预约已过去的时间段"),
     RESERVATION_DUPLICATED(50005, "同一时间段已存在有效预约"),
-    CHECKIN_CODE_INVALID(50101, "签到码无效或已过期"),
-    CHECKIN_NOT_IN_TIME(50102, "不在签到时间范围内"),
+    CHECKIN_CODE_INVALID(50101, "签到码不正确，请核对后重试"),
+    CHECKIN_NOT_IN_TIME(50102, "签到时间已过，此次预约已被记为违约"),
+    CHECKIN_TOO_EARLY(50103, "还没到签到时间哦，开始前15分钟才能签到"),
 
     // 系统级
     INTERNAL_ERROR(90000, "系统内部错误"),
