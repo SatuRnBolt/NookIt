@@ -63,4 +63,11 @@ public class StudentReservationController {
         studentReservationService.cancelReservation(user.getUserId(), id);
         return Result.success();
     }
+
+    @PostMapping("/reservations/checkin")
+    @Operation(summary = "输入签到码签到")
+    public Result<Map<String, Object>> checkin(@CurrentUser UserPrincipal user,
+                                               @RequestBody Map<String, String> body) {
+        return Result.success(studentReservationService.checkinByCode(user.getUserId(), body.get("code")));
+    }
 }

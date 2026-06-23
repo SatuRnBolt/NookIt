@@ -161,7 +161,7 @@ public class StudentReservationServiceImpl implements StudentReservationService 
         r.setReservationStatus("pending_checkin");
         r.setSourceChannel("web");
         r.setNotesText(String.format("%04d", new Random().nextInt(10000)));
-        r.setCheckinDeadlineAt(reqStart.plusMinutes(15));
+        r.setCheckinDeadlineAt(reqEnd);  // 整个时段内均可签到，结束后未签到才算违约
         bookingMapper.insert(r);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -170,6 +170,54 @@ public class StudentReservationServiceImpl implements StudentReservationService 
         result.put("seatCode", seat.getSeatCode());
         result.put("status", r.getReservationStatus());
         result.put("checkinCode", r.getNotesText());
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> checkinByCode(Long userId, String code) {
+        if (code == null || code.isBlank()) {
+            throw new BusinessException(ResultCode.CHECKIN_CODE_INVALID);
+        }
+        // 按签到码查找该用户待签到的预约
+        Reservation r = bookingMapper.selectOne(
+                new LambdaQueryWrapper<Reservation>()
+                        .eq(Reservation::getUserId, userId)
+                        .eq(Reservation::getNotesText, code.trim())
+                        .eq(Reservation::getReservationStatus, "pending_checkin")
+        );
+        if (r == null) {
+            throw new BusinessException(ResultCode.CHECKIN_CODE_INVALID);
+        }
+        // 校验签到时间窗口：开始前15分钟 ~ 预约结束时间
+        LocalDateTime now        = LocalDateTime.now();
+        LocalDateTime windowOpen = r.getStartAt().minusMinutes(15);
+        LocalDateTime deadline   = r.getCheckinDeadlineAt() != null
+                ? r.getCheckinDeadlineAt()
+                : r.getEndAt();
+        if (now.isBefore(windowOpen)) {
+            throw new BusinessException(ResultCode.CHECKIN_TOO_EARLY);
+        }
+        if (now.isAfter(deadline)) {
+            throw new BusinessException(ResultCode.CHECKIN_NOT_IN_TIME);
+        }
+        r.setReservationStatus("checked_in");
+        r.setCheckedInAt(now);
+        bookingMapper.updateById(r);
+
+        StudyRoom room = roomMapper.selectById(r.getStudyRoomId());
+        Seat seat      = seatMapper.selectById(r.getSeatId());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id",       r.getId());
+        result.put("roomName", room != null ? room.getRoomName() : null);
+        result.put("seatCode", seat != null ? seat.getSeatCode() : null);
+        result.put("date",     r.getReservationDate() != null ? r.getReservationDate().toString() : null);
+        String startTime = r.getStartAt() != null ? r.getStartAt().toLocalTime().toString().substring(0, 5) : null;
+        String endTime   = r.getEndAt()   != null ? r.getEndAt().toLocalTime().toString().substring(0, 5)   : null;
+        result.put("startTime", startTime);
+        result.put("endTime",   endTime);
+        result.put("status",    r.getReservationStatus());
         return result;
     }
 
