@@ -33,14 +33,13 @@ env/
 !.env.example
 
 # ===== Logs =====
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-logs/
-docs/
-work/
+lerna-debug.log*
 
 # ===== IDE / Editor =====
 .idea/
@@ -48,7 +47,15 @@ work/
 *.iml
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
 # ===== OS =====
 .DS_Store
 Thumbs.db
+
+# ===== Project-specific =====
+docs/
+work/
