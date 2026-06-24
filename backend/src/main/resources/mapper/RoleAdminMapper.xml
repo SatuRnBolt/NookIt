@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.role.mapper.RoleAdminMapper">
+
+    <select id="listRoles" resultType="com.nookit.modules.admin.role.dto.RoleVO">
+        SELECT
+            r.id,
+            r.role_name AS name,
+            r.role_description AS description,
+            (SELECT COUNT(*) FROM user_roles ur WHERE ur.role_id = r.id
+                AND (ur.effective_to IS NULL OR ur.effective_to > NOW())) AS userCount
+        FROM roles r
+        WHERE r.role_status = 'active'
+        ORDER BY r.id
+    </select>
+
+    <select id="findRoleDetail" resultType="com.nookit.modules.admin.role.dto.RoleVO">
+        SELECT
+            r.id,
+            r.role_name AS name,
+            r.role_description AS description,
+            (SELECT COUNT(*) FROM user_roles ur WHERE ur.role_id = r.id
+                AND (ur.effective_to IS NULL OR ur.effective_to > NOW())) AS userCount
+        FROM roles r
+        WHERE r.id = #{id}
+    </select>
+
+</mapper>

@@ -1,0 +1,50 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { login as loginApi, logout as logoutApi, getMe, updateMySignature } from '../api/auth'
+
+export const useStudentAuthStore = defineStore('studentAuth', () => {
+  const user = ref(null)
+  const isLoggedIn = ref(false)
+
+  async function login(identity, password) {
+    const data = await loginApi(identity, password)
+    localStorage.setItem('student_token', data.token)
+    user.value = data.user
+    isLoggedIn.value = true
+    return user.value
+  }
+
+  async function logout() {
+    try {
+      await logoutApi()
+    } catch {
+      // ignore
+    }
+    user.value = null
+    isLoggedIn.value = false
+    localStorage.removeItem('student_token')
+  }
+
+  async function checkAuth() {
+    const token = localStorage.getItem('student_token')
+    if (!token) return
+    try {
+      const me = await getMe()
+      user.value = me
+      isLoggedIn.value = true
+    } catch {
+      localStorage.removeItem('student_token')
+      user.value = null
+      isLoggedIn.value = false
+    }
+  }
+
+  async function saveSignature(signature) {
+    const updatedUser = await updateMySignature(signature)
+    user.value = updatedUser
+    isLoggedIn.value = true
+    return updatedUser
+  }
+
+  return { user, isLoggedIn, login, logout, checkAuth, saveSignature }
+})

@@ -222,12 +222,12 @@ export const mockSeats = [
 ]
 
 export const mockBookings = [
-  { id: 1001, studentName: '张三', studentId: '2021001234', roomName: '图书馆自习室 A', seatNo: 'A03', date: '2026-04-08', startHour: 14, endHour: 17, status: 'confirmed', createdAt: '2026-04-07 20:15' },
-  { id: 1002, studentName: '李四', studentId: '2021005678', roomName: '教学楼 C-301', seatNo: 'C12', date: '2026-04-08', startHour: 9, endHour: 11, status: 'checkedin', createdAt: '2026-04-07 19:30' },
-  { id: 1003, studentName: '王五', studentId: '2022003344', roomName: '图书馆自习室 B', seatNo: 'B07', date: '2026-04-06', startHour: 19, endHour: 22, status: 'cancelled', createdAt: '2026-04-05 15:00' },
-  { id: 1004, studentName: '赵六', studentId: '2020009988', roomName: '图书馆自习室 A', seatNo: 'A15', date: '2026-04-05', startHour: 8, endHour: 10, status: 'missed', createdAt: '2026-04-04 22:00' },
-  { id: 1005, studentName: '钱七', studentId: '2021007722', roomName: '计算机学院 自习室', seatNo: 'D05', date: '2026-04-08', startHour: 10, endHour: 12, status: 'confirmed', createdAt: '2026-04-08 08:00' },
-  { id: 1006, studentName: '孙八', studentId: '2022001155', roomName: '图书馆自习室 A', seatNo: 'A22', date: '2026-04-08', startHour: 14, endHour: 16, status: 'checkedin', createdAt: '2026-04-08 09:00' },
+  { id: 1001, studentName: '张三', studentId: '2021001234', roomName: '图书馆自习室 A', seatNo: 'A03', date: '2026-04-08', startTime: '14:00', endTime: '17:00', status: 'confirmed', createdAt: '2026-04-07 20:15' },
+  { id: 1002, studentName: '李四', studentId: '2021005678', roomName: '教学楼 C-301', seatNo: 'C12', date: '2026-04-08', startTime: '09:00', endTime: '11:00', status: 'checkedin', createdAt: '2026-04-07 19:30' },
+  { id: 1003, studentName: '王五', studentId: '2022003344', roomName: '图书馆自习室 B', seatNo: 'B07', date: '2026-04-06', startTime: '19:00', endTime: '22:00', status: 'cancelled', createdAt: '2026-04-05 15:00' },
+  { id: 1004, studentName: '赵六', studentId: '2020009988', roomName: '图书馆自习室 A', seatNo: 'A15', date: '2026-04-05', startTime: '08:00', endTime: '10:00', status: 'missed', createdAt: '2026-04-04 22:00' },
+  { id: 1005, studentName: '钱七', studentId: '2021007722', roomName: '计算机学院 自习室', seatNo: 'D05', date: '2026-04-08', startTime: '10:00', endTime: '12:00', status: 'confirmed', createdAt: '2026-04-08 08:00' },
+  { id: 1006, studentName: '孙八', studentId: '2022001155', roomName: '图书馆自习室 A', seatNo: 'A22', date: '2026-04-08', startTime: '14:00', endTime: '16:00', status: 'checkedin', createdAt: '2026-04-08 09:00' },
 ]
 
 export const mockViolations = [

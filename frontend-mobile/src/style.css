@@ -1,0 +1,82 @@
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  --nt-primary: #003893;
+  --nt-primary-dark: #002370;
+  --nt-primary-light: #eef4ff;
+  --nt-primary-mid: #1a5cc8;
+  --nt-bg: #f4f6fb;
+  --nt-card-bg: #ffffff;
+  --nt-text: #1a202c;
+  --nt-text-secondary: #6b7a99;
+  --nt-border: #e8eaf2;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  color: var(--nt-text);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100vh;
+  background: var(--nt-bg);
+}
+
+.page-wrap {
+  min-height: 100%;
+  background: var(--nt-bg);
+}
+
+.card {
+  background: var(--nt-card-bg);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 0 12px 12px;
+  box-shadow: 0 2px 8px rgba(0, 56, 147, 0.06);
+}
+
+.page-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--nt-text);
+  padding: 16px 16px 8px;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-tag.pending { background: #fff7e6; color: #d97706; }
+.status-tag.checked_in { background: #eff6ff; color: #2563eb; }
+.status-tag.completed { background: #f0fdf4; color: #16a34a; }
+.status-tag.cancelled { background: #f3f4f6; color: #6b7280; }
+.status-tag.violated { background: #fef2f2; color: #dc2626; }
+
+.van-nav-bar {
+  --van-nav-bar-background: #003893;
+  --van-nav-bar-title-text-color: #fff;
+  --van-nav-bar-icon-color: #fff;
+  --van-nav-bar-arrow-size: 18px;
+}
+
+.van-nav-bar .van-nav-bar__title {
+  color: #fff;
+  font-weight: 700;
+}
+
+.van-tabbar {
+  --van-tabbar-item-active-color: #003893;
+  box-shadow: 0 -2px 12px rgba(0, 56, 147, 0.08);
+}

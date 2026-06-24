@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.feedback.mapper.FeedbackMapper">
+
+    <select id="pageFeedbacks" resultType="com.nookit.modules.admin.feedback.dto.FeedbackVO">
+        SELECT
+            f.id,
+            f.student_name AS studentName,
+            f.student_no AS studentId,
+            f.feedback_type AS type,
+            f.title,
+            f.content,
+            f.feedback_status AS status,
+            f.reply_content AS reply,
+            (SELECT u.full_name FROM users u WHERE u.id = f.replied_by) AS repliedBy,
+            f.replied_at AS repliedAt,
+            f.created_at AS createdAt
+        FROM user_feedbacks f
+        WHERE f.deleted_at IS NULL
+        <if test="search != null and search != ''">
+            AND (f.student_name LIKE CONCAT('%', #{search}, '%')
+              OR f.student_no LIKE CONCAT('%', #{search}, '%')
+              OR f.title LIKE CONCAT('%', #{search}, '%'))
+        </if>
+        <if test="type != null and type != ''">
+            AND f.feedback_type = #{type}
+        </if>
+        <if test="status != null and status != ''">
+            AND f.feedback_status = #{status}
+        </if>
+        ORDER BY f.created_at DESC
+    </select>
+
+    <select id="findById" resultType="com.nookit.modules.admin.feedback.dto.FeedbackVO">
+        SELECT
+            f.id,
+            f.student_name AS studentName,
+            f.student_no AS studentId,
+            f.feedback_type AS type,
+            f.title,
+            f.content,
+            f.feedback_status AS status,
+            f.reply_content AS reply,
+            (SELECT u.full_name FROM users u WHERE u.id = f.replied_by) AS repliedBy,
+            f.replied_at AS repliedAt,
+            f.created_at AS createdAt
+        FROM user_feedbacks f
+        WHERE f.id = #{id} AND f.deleted_at IS NULL
+    </select>
+
+</mapper>

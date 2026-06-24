@@ -27,7 +27,7 @@
               <div class="role-desc">{{ role.description }}</div>
               <div class="role-actions" @click.stop>
                 <el-button link size="small" @click="openRoleDialog(role)">编辑</el-button>
-                <el-button link size="small" type="danger" @click="deleteRole(role)" :disabled="role.id === 1">删除</el-button>
+                <el-button link size="small" type="danger" @click="deleteRole(role)" :disabled="role.name === SUPER_ROLE_NAME">删除</el-button>
               </div>
             </div>
           </div>
@@ -57,22 +57,25 @@
             <div class="perm-grid">
               <div
                 v-for="perm in allPermissions"
-                :key="perm.key"
+                :key="perm.code"
                 class="perm-item"
-                :class="{ enabled: editingPerms.includes(perm.key), disabled: selectedRole.id === 1 }"
-                @click="selectedRole.id !== 1 && togglePerm(perm.key)"
+                :class="{ enabled: editingPerms.includes(perm.code), disabled: isSuperRole }"
+                @click="!isSuperRole && togglePerm(perm.code)"
               >
                 <div class="perm-check">
-                  <el-icon v-if="editingPerms.includes(perm.key)" color="#4f6ef7" :size="20">
+                  <el-icon v-if="editingPerms.includes(perm.code)" color="#4f6ef7" :size="20">
                     <SuccessFilled />
                   </el-icon>
                   <div v-else class="perm-empty-check"></div>
                 </div>
-                <div class="perm-label">{{ perm.label }}</div>
+                <div class="perm-label">
+                  <span class="perm-name">{{ perm.name || perm.code }}</span>
+                  <span class="perm-code">{{ perm.code }}</span>
+                </div>
               </div>
             </div>
 
-            <div v-if="selectedRole.id === 1" class="super-notice">
+            <div v-if="isSuperRole" class="super-notice">
               <el-icon><Warning /></el-icon>
               超级管理员拥有全部权限，不可修改
             </div>
@@ -96,12 +99,12 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockRoles, PERMISSIONS } from '../mock/data'
+import { getRoles, createRole, updateRole, deleteRole as deleteRoleApi, savePermissions as savePermsApi, getAllPermissions } from '../api/roles'
 
-const roles = ref(JSON.parse(JSON.stringify(mockRoles)))
-const allPermissions = PERMISSIONS
+const roles = ref([])
+const allPermissions = ref([])
 const selectedRoleId = ref(null)
 const roleDialog = ref(false)
 const editingRole = ref(null)
@@ -111,64 +114,69 @@ const roleForm = reactive({ name: '', description: '' })
 
 const selectedRole = computed(() => roles.value.find(r => r.id === selectedRoleId.value))
 
+// 角色主键为雪花 ID（字符串），不能再用 id===1 判断系统管理员
+const SUPER_ROLE_NAME = '系统管理员'
+const isSuperRole = computed(() => selectedRole.value?.name === SUPER_ROLE_NAME)
+
 watch(selectedRole, (role) => {
-  editingPerms.value = role ? [...role.permissions] : []
+  editingPerms.value = role ? [...(role.permissions || [])] : []
 }, { immediate: true })
+
+async function loadRoles() {
+  try {
+    const [roleList, perms] = await Promise.all([getRoles(), getAllPermissions()])
+    roles.value = roleList || []
+    allPermissions.value = perms || []
+    if (!selectedRoleId.value && roles.value.length) selectedRoleId.value = roles.value[0].id
+  } catch {}
+}
+
+onMounted(loadRoles)
 
 function togglePerm(key) {
   const i = editingPerms.value.indexOf(key)
-  if (i >= 0) {
-    editingPerms.value.splice(i, 1)
-  } else {
-    editingPerms.value.push(key)
-  }
+  if (i >= 0) editingPerms.value.splice(i, 1)
+  else editingPerms.value.push(key)
 }
 
-function savePermissions() {
-  if (selectedRole.value) {
+async function savePermissions() {
+  if (!selectedRole.value) return
+  try {
+    await savePermsApi(selectedRole.value.id, editingPerms.value)
     selectedRole.value.permissions = [...editingPerms.value]
     ElMessage.success('权限配置已保存')
-  }
+  } catch {}
 }
 
 function openRoleDialog(role = null) {
   editingRole.value = role
-  if (role) {
-    Object.assign(roleForm, role)
-  } else {
-    Object.assign(roleForm, { name: '', description: '' })
-  }
+  Object.assign(roleForm, role ? { name: role.name, description: role.description } : { name: '', description: '' })
   roleDialog.value = true
 }
 
-function saveRole() {
-  if (!roleForm.name) {
-    ElMessage.warning('请填写角色名称')
-    return
-  }
-  if (editingRole.value) {
-    Object.assign(editingRole.value, { name: roleForm.name, description: roleForm.description })
-    ElMessage.success('角色已更新')
-  } else {
-    roles.value.push({
-      id: Date.now(), name: roleForm.name, description: roleForm.description,
-      permissions: [], userCount: 0
-    })
-    ElMessage.success('角色已创建')
-  }
-  roleDialog.value = false
+async function saveRole() {
+  if (!roleForm.name) { ElMessage.warning('请填写角色名称'); return }
+  try {
+    if (editingRole.value) {
+      await updateRole(editingRole.value.id, { name: roleForm.name, description: roleForm.description })
+      ElMessage.success('角色已更新')
+    } else {
+      await createRole({ name: roleForm.name, description: roleForm.description })
+      ElMessage.success('角色已创建')
+    }
+    roleDialog.value = false
+    loadRoles()
+  } catch {}
 }
 
 async function deleteRole(role) {
-  if (role.userCount > 0) {
-    ElMessage.warning('该角色下还有用户，无法删除')
-    return
-  }
+  if (role.userCount > 0) { ElMessage.warning('该角色下还有用户，无法删除'); return }
   try {
     await ElMessageBox.confirm(`确定删除角色"${role.name}"吗？`, '删除确认', { type: 'warning' })
-    roles.value = roles.value.filter(r => r.id !== role.id)
+    await deleteRoleApi(role.id)
     if (selectedRoleId.value === role.id) selectedRoleId.value = null
     ElMessage.success('角色已删除')
+    loadRoles()
   } catch {}
 }
 </script>
@@ -292,9 +300,22 @@ async function deleteRole(role) {
 }
 
 .perm-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.perm-name {
   font-size: 13px;
   font-weight: 500;
   color: #374151;
+}
+
+.perm-code {
+  font-size: 11px;
+  color: #9ca3af;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .super-notice {

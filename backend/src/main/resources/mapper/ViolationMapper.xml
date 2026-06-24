@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.violation.mapper.ViolationMapper">
+
+    <select id="pageViolations" resultType="com.nookit.modules.admin.violation.dto.ViolationVO">
+        SELECT
+            v.id,
+            u.full_name AS studentName,
+            COALESCE(u.student_no, u.employee_no) AS studentId,
+            COALESCE(sr.display_name, sr.room_name) AS roomName,
+            s.seat_code AS seatNo,
+            DATE_FORMAT(v.occurred_at, '%Y-%m-%d') AS date,
+            DATE_FORMAT(v.occurred_at, '%H:%i') AS time,
+            v.description_text AS reason,
+            u.violation_count AS count,
+            v.created_at AS createdAt
+        FROM violations v
+        JOIN users u ON u.id = v.user_id
+        JOIN reservations r ON r.id = v.reservation_id
+        JOIN study_rooms sr ON sr.id = r.study_room_id
+        JOIN seats s ON s.id = r.seat_id
+        <where>
+            <if test="search != null and search != ''">
+                (u.full_name LIKE CONCAT('%', #{search}, '%')
+                 OR u.student_no LIKE CONCAT('%', #{search}, '%'))
+            </if>
+        </where>
+        ORDER BY v.created_at DESC
+    </select>
+
+    <select id="queryStats" resultType="com.nookit.modules.admin.violation.dto.ViolationStatsVO">
+        SELECT
+            COUNT(*) AS total,
+            COUNT(DISTINCT user_id) AS uniqueStudents,
+            (SELECT COUNT(*) FROM users WHERE account_status = 'suspended' AND deleted_at IS NULL) AS suspendedStudents,
+            SUM(CASE WHEN occurred_at >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN 1 ELSE 0 END) AS newThisMonth
+        FROM violations
+        WHERE violation_status = 'active'
+    </select>
+
+    <select id="findByStudentId" resultType="com.nookit.modules.admin.violation.dto.ViolationVO">
+        SELECT
+            v.id,
+            u.full_name AS studentName,
+            COALESCE(u.student_no, u.employee_no) AS studentId,
+            COALESCE(sr.display_name, sr.room_name) AS roomName,
+            s.seat_code AS seatNo,
+            DATE_FORMAT(v.occurred_at, '%Y-%m-%d') AS date,
+            DATE_FORMAT(v.occurred_at, '%H:%i') AS time,
+            v.description_text AS reason,
+            u.violation_count AS count,
+            v.created_at AS createdAt
+        FROM violations v
+        JOIN users u ON u.id = v.user_id
+        JOIN reservations r ON r.id = v.reservation_id
+        JOIN study_rooms sr ON sr.id = r.study_room_id
+        JOIN seats s ON s.id = r.seat_id
+        WHERE v.user_id = #{userId}
+        ORDER BY v.created_at DESC
+    </select>
+
+    <select id="countByStudentId" resultType="int">
+        SELECT COUNT(*) FROM violations WHERE user_id = #{userId} AND violation_status = 'active'
+    </select>
+
+</mapper>

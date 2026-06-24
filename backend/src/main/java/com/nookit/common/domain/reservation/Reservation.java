@@ -24,9 +24,6 @@ public class Reservation extends BaseEntity {
     private LocalDate reservationDate;
     private LocalDateTime startAt;
     private LocalDateTime endAt;
-    private Integer startHour;
-    private Integer endHour;
-    private Integer durationHours;
     private String reservationStatus;
     private String sourceChannel;
     private String cancelReasonType;

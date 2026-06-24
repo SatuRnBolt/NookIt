@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.seat.mapper.SeatAdminMapper">
+
+    <select id="pageSeats" resultType="com.nookit.modules.admin.seat.dto.SeatAdminVO">
+        SELECT
+            s.id,
+            s.seat_code AS seatNo,
+            COALESCE(sr.display_name, sr.room_name) AS roomName,
+            s.has_power AS hasPower,
+            s.is_window_side AS nearWindow,
+            s.seat_status AS status,
+            s.created_at AS createdAt
+        FROM seats s
+        JOIN study_rooms sr ON sr.id = s.study_room_id
+        WHERE s.deleted_at IS NULL
+        <if test="q.search != null and q.search != ''">
+            AND s.seat_code LIKE CONCAT('%', #{q.search}, '%')
+        </if>
+        <if test="q.roomId != null">
+            AND s.study_room_id = #{q.roomId}
+        </if>
+        <if test="q.status != null and q.status != ''">
+            AND s.seat_status = #{q.status}
+        </if>
+        <if test="q.hasPower != null">
+            AND s.has_power = #{q.hasPower}
+        </if>
+        ORDER BY sr.room_name, s.seat_code
+    </select>
+
+</mapper>

@@ -125,34 +125,26 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import {
   Odometer, TrendCharts, OfficeBuilding, Histogram,
   InfoFilled, Bell, ArrowRight, ChatDotRound, EditPen,
   Warning, CircleClose,
 } from '@element-plus/icons-vue'
-import {
-  mockDashboard, mockFeedback, mockNotices, mockViolations, mockBookings,
-} from '../mock/data'
+import { getSummary, getWeeklyTrend, getRoomOccupancy, getTodos, getHeatmap } from '../api/dashboard'
 
 const weekLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-const dashboard = mockDashboard
-const maxTrend = Math.max(...dashboard.weeklyTrend)
+const DAY_EN = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4, Saturday: 5, Sunday: 6 }
+
+const dashboard = reactive({ occupancyRate: 0, weeklyTrend: [0,0,0,0,0,0,0], topRooms: [] })
+const heatmap = ref(Array(7).fill(null).map(() => Array(24).fill(0)))
+const todoCounts = ref({ pendingFeedback: 0, draftNotices: 0, heavyViolations: 0, missedBookings: 0 })
+
+const maxTrend = computed(() => Math.max(...dashboard.weeklyTrend, 1))
 
 const today = new Date()
 const todayStr = `${today.getFullYear()} 年 ${today.getMonth() + 1} 月 ${today.getDate()} 日`
 const weekday = weekLabels[(today.getDay() + 6) % 7]
-
-// 一周 × 24 小时热力数据（模拟典型校园自习高峰）
-const heatmap = [
-  [0,0,0,0,0,0,0, 5,15,30,45,50,35,30,50,55,50,40,60,75,80,70,35,10],
-  [0,0,0,0,0,0,0, 8,20,35,50,55,40,35,55,60,55,45,65,78,85,72,38,12],
-  [0,0,0,0,0,0,0, 5,18,32,48,52,38,32,52,58,52,42,62,76,82,70,36,11],
-  [0,0,0,0,0,0,0,10,22,38,52,58,42,38,58,62,58,48,68,80,88,75,40,14],
-  [0,0,0,0,0,0,0, 7,18,30,42,48,35,30,48,52,48,38,55,70,75,60,30,10],
-  [0,0,0,0,0,0,0, 5,15,25,35,40,30,28,40,45,40,35,45,55,60,45,25, 8],
-  [0,0,0,0,0,0,0, 3,12,22,32,38,28,25,35,42,38,32,40,50,55,40,22, 6],
-]
 
 const legendColors = ['#f1f5f9', '#dbeafe', '#93c5fd', '#3b82f6', '#1e3a8a']
 
@@ -166,49 +158,52 @@ function heatColor(val) {
 }
 
 const todoList = computed(() => {
-  const pendingFeedback = mockFeedback.filter(f => f.status === 'pending').length
-  const processingFeedback = mockFeedback.filter(f => f.status === 'processing').length
-  const draftNotices = mockNotices.filter(n => n.status === 'draft').length
-  const heavyViolations = mockViolations.filter(v => v.count >= 2).length
-  const missedBookings = mockBookings.filter(b => b.status === 'missed').length
-
+  const { pendingFeedback, draftNotices, heavyViolations, missedBookings } = todoCounts.value
   return [
-    {
-      icon: ChatDotRound,
-      label: '待回复反馈',
-      desc: '学生新提交的问题',
-      count: pendingFeedback + processingFeedback,
-      level: pendingFeedback > 0 ? 'danger' : 'info',
-      to: '/feedback',
-    },
-    {
-      icon: EditPen,
-      label: '草稿公告',
-      desc: '已创建尚未发布',
-      count: draftNotices,
-      level: 'warning',
-      to: '/notices',
-    },
-    {
-      icon: Warning,
-      label: '严重违约学生',
-      desc: '违约 ≥ 2 次需关注',
-      count: heavyViolations,
-      level: heavyViolations > 0 ? 'danger' : 'info',
-      to: '/violations',
-    },
-    {
-      icon: CircleClose,
-      label: '今日爽约预约',
-      desc: '未按时签到的预约',
-      count: missedBookings,
-      level: 'warning',
-      to: '/bookings',
-    },
+    { icon: ChatDotRound, label: '待回复反馈', desc: '学生新提交的问题', count: pendingFeedback || 0, level: pendingFeedback > 0 ? 'danger' : 'info', to: '/feedback' },
+    { icon: EditPen, label: '草稿公告', desc: '已创建尚未发布', count: draftNotices || 0, level: 'warning', to: '/notices' },
+    { icon: Warning, label: '严重违约学生', desc: '违约 ≥ 3 次需关注', count: heavyViolations || 0, level: heavyViolations > 0 ? 'danger' : 'info', to: '/violations' },
+    { icon: CircleClose, label: '今日爽约预约', desc: '未按时签到的预约', count: missedBookings || 0, level: 'warning', to: '/bookings' },
   ]
 })
 
 const totalTodos = computed(() => todoList.value.reduce((s, t) => s + t.count, 0))
+
+onMounted(async () => {
+  const [summary, trend, rooms, heatmapRes, todos] = await Promise.allSettled([
+    getSummary(), getWeeklyTrend(), getRoomOccupancy(4), getHeatmap(), getTodos(),
+  ])
+
+  if (summary.status === 'fulfilled' && summary.value) {
+    dashboard.occupancyRate = summary.value.occupancyRate ?? 0
+  }
+
+  if (trend.status === 'fulfilled' && trend.value) {
+    const arr = [0,0,0,0,0,0,0]
+    trend.value.forEach(item => {
+      const d = new Date(item.date)
+      arr[(d.getDay() + 6) % 7] = Number(item.value) || 0
+    })
+    dashboard.weeklyTrend = arr
+  }
+
+  if (rooms.status === 'fulfilled' && rooms.value) {
+    dashboard.topRooms = rooms.value.map(r => ({ name: r.roomName ?? r.name, rate: r.rate || 0 }))
+  }
+
+  if (heatmapRes.status === 'fulfilled' && heatmapRes.value) {
+    const mat = Array(7).fill(null).map(() => Array(24).fill(0))
+    heatmapRes.value.forEach(row => {
+      const idx = DAY_EN[row.day]
+      if (idx !== undefined && row.hour >= 0 && row.hour < 24) mat[idx][row.hour] = Number(row.value) || 0
+    })
+    heatmap.value = mat
+  }
+
+  if (todos.status === 'fulfilled' && todos.value) {
+    todoCounts.value = todos.value
+  }
+})
 </script>
 
 <style scoped>

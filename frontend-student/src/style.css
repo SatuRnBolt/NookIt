@@ -1,0 +1,48 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  font-family: "Microsoft YaHei UI", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: #f4f6fb;
+  color: #1a202c;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.content-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0, 56, 147, 0.06);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.page-header .page-icon {
+  font-size: 22px;
+  color: #003893;
+}
+
+.page-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.page-header .page-subtitle {
+  font-size: 13px;
+  color: #8492a6;
+  margin-left: 4px;
+}

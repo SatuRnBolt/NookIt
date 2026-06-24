@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.room.mapper.SeatMapMapper">
+
+    <select id="findPublishedMap" resultType="com.nookit.modules.admin.room.dto.SeatMapVO">
+        SELECT id, version_no AS versionNo, map_status AS mapStatus,
+               map_width AS mapWidth, map_height AS mapHeight,
+               background_url AS backgroundUrl, published_at AS publishedAt
+        FROM seat_maps
+        WHERE study_room_id = #{roomId} AND map_status = 'published'
+        ORDER BY version_no DESC
+        LIMIT 1
+    </select>
+
+    <select id="findNextVersionNo" resultType="int">
+        SELECT COALESCE(MAX(version_no), 0) + 1
+        FROM seat_maps
+        WHERE study_room_id = #{roomId}
+    </select>
+
+    <select id="findSeatsByMapId" resultType="com.nookit.modules.admin.room.dto.SeatMapVO$SeatVO">
+        SELECT
+            s.id,
+            s.seat_code AS seatCode,
+            s.display_label AS displayLabel,
+            s.seat_type AS seatType,
+            s.row_no AS rowNo,
+            s.col_no AS colNo,
+            s.has_power AS hasPower,
+            s.is_window_side AS isWindowSide,
+            s.is_accessible AS isAccessible,
+            s.seat_status AS seatStatus,
+            s.is_bookable AS isBookable,
+            s.map_x AS mapX,
+            s.map_y AS mapY,
+            s.map_width AS mapWidth,
+            s.map_height AS mapHeight,
+            s.map_rotation AS mapRotation
+        FROM seats s
+        JOIN seat_maps sm ON sm.study_room_id = s.study_room_id
+        WHERE sm.id = #{mapId}
+          AND s.deleted_at IS NULL
+        ORDER BY s.row_no, s.col_no
+    </select>
+
+</mapper>

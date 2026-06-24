@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nookit.modules.admin.room.mapper.RoomMapper">
+
+    <select id="pageRooms" resultType="com.nookit.modules.admin.room.dto.RoomVO">
+        SELECT
+            sr.id,
+            sr.room_code AS roomCode,
+            sr.room_name AS roomName,
+            sr.display_name AS displayName,
+            c.campus_name AS campus,
+            b.building_name AS building,
+            f.floor_name AS floor,
+            o.org_name AS ownerOrganization,
+            rt.room_type_name AS roomType,
+            sr.total_capacity AS totalCapacity,
+            sr.visibility_scope AS visibilityScope,
+            sr.room_status AS roomStatus,
+            sr.open_rule_type AS openRuleType,
+            sr.location_detail AS locationDetail,
+            sr.created_at AS createdAt,
+            sr.campus_id AS campusId,
+            sr.building_id AS buildingId,
+            sr.floor_id AS floorId,
+            sr.owner_organization_id AS ownerOrganizationId,
+            sr.room_type_id AS roomTypeId
+        FROM study_rooms sr
+        JOIN campuses c ON c.id = sr.campus_id
+        JOIN buildings b ON b.id = sr.building_id
+        LEFT JOIN floors f ON f.id = sr.floor_id
+        LEFT JOIN organizations o ON o.id = sr.owner_organization_id
+        JOIN room_types rt ON rt.id = sr.room_type_id
+        WHERE sr.deleted_at IS NULL
+        <if test="q.search != null and q.search != ''">
+            AND (sr.room_code LIKE CONCAT('%', #{q.search}, '%')
+              OR sr.room_name LIKE CONCAT('%', #{q.search}, '%'))
+        </if>
+        <if test="q.campus != null and q.campus != ''">
+            AND c.campus_name = #{q.campus}
+        </if>
+        <if test="q.visibilityScope != null and q.visibilityScope != ''">
+            AND sr.visibility_scope = #{q.visibilityScope}
+        </if>
+        ORDER BY sr.created_at DESC
+    </select>
+
+    <select id="findRoomDetail" resultType="com.nookit.modules.admin.room.dto.RoomVO">
+        SELECT
+            sr.id,
+            sr.room_code AS roomCode,
+            sr.room_name AS roomName,
+            sr.display_name AS displayName,
+            c.campus_name AS campus,
+            b.building_name AS building,
+            f.floor_name AS floor,
+            o.org_name AS ownerOrganization,
+            rt.room_type_name AS roomType,
+            sr.total_capacity AS totalCapacity,
+            sr.visibility_scope AS visibilityScope,
+            sr.room_status AS roomStatus,
+            sr.open_rule_type AS openRuleType,
+            sr.location_detail AS locationDetail,
+            sr.description_text AS descriptionText,
+            sr.created_at AS createdAt,
+            sr.campus_id AS campusId,
+            sr.building_id AS buildingId,
+            sr.floor_id AS floorId,
+            sr.owner_organization_id AS ownerOrganizationId,
+            sr.room_type_id AS roomTypeId
+        FROM study_rooms sr
+        JOIN campuses c ON c.id = sr.campus_id
+        JOIN buildings b ON b.id = sr.building_id
+        LEFT JOIN floors f ON f.id = sr.floor_id
+        LEFT JOIN organizations o ON o.id = sr.owner_organization_id
+        JOIN room_types rt ON rt.id = sr.room_type_id
+        WHERE sr.id = #{id} AND sr.deleted_at IS NULL
+    </select>
+
+    <select id="queryStats" resultType="com.nookit.modules.admin.room.dto.RoomStatsVO">
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN room_status = 'active' THEN 1 ELSE 0 END) AS active,
+            SUM(CASE WHEN room_status = 'inactive' THEN 1 ELSE 0 END) AS inactive,
+            COALESCE(SUM(total_capacity), 0) AS totalCapacity
+        FROM study_rooms
+        WHERE deleted_at IS NULL
+    </select>
+
+    <select id="listSimple" resultType="map">
+        SELECT id, COALESCE(display_name, room_name) AS name
+        FROM study_rooms
+        WHERE room_status = 'active' AND deleted_at IS NULL
+        ORDER BY room_name
+    </select>
+
+</mapper>

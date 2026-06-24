@@ -33,10 +33,11 @@
         <div class="filter-left">
           <el-input v-model="search" placeholder="搜索学生姓名/学号" prefix-icon="Search" clearable style="width:200px" />
           <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width:120px">
-            <el-option label="待签到" value="confirmed" />
-            <el-option label="已签到" value="checkedin" />
+            <el-option label="待签到" value="pending_checkin" />
+            <el-option label="已签到" value="checked_in" />
+            <el-option label="已完成" value="completed" />
             <el-option label="已取消" value="cancelled" />
-            <el-option label="已违约" value="missed" />
+            <el-option label="已违约" value="violated" />
           </el-select>
           <el-date-picker
             v-model="dateFilter"
@@ -49,14 +50,18 @@
             :disabled="activeTab !== 'all'"
           />
         </div>
-        <span class="filter-count">共 {{ filteredBookings.length }} 条</span>
+        <span class="filter-count">共 {{ total }} 条</span>
       </div>
     </div>
 
     <!-- Table Card -->
     <div class="content-card">
-      <el-table :data="pagedBookings" stripe style="width:100%">
-        <el-table-column prop="id" label="ID" width="64" />
+      <el-table :data="bookings" stripe style="width:100%">
+        <el-table-column prop="reservationNo" label="预约编号" min-width="124">
+          <template #default="{ row }">
+            <span class="reservation-no">{{ row.reservationNo || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="学生" min-width="130">
           <template #default="{ row }">
             <div class="student-name">{{ row.studentName }}</div>
@@ -68,7 +73,7 @@
         <el-table-column prop="date" label="日期" width="112" />
         <el-table-column label="时间段" width="144">
           <template #default="{ row }">
-            {{ String(row.startHour).padStart(2,'0') }}:00 – {{ String(row.endHour).padStart(2,'0') }}:00
+            {{ row.startTime || '-' }} – {{ row.endTime || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="96" align="center">
@@ -80,8 +85,9 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <div style="display: flex; gap: 8px;">
-              <el-button v-if="row.status === 'confirmed'" link type="success" @click="manualCheckIn(row)">手动签到</el-button>
-              <el-button v-if="row.status === 'confirmed'" link type="danger" @click="cancelBooking(row)">取消预约</el-button>
+              <el-button v-if="row.status === 'pending_checkin'" link type="success" @click="manualCheckIn(row)">手动签到</el-button>
+              <el-button v-if="row.status === 'pending_checkin'" link type="danger" @click="cancelBooking(row)">取消预约</el-button>
+              <span v-if="row.status !== 'pending_checkin'" class="no-action">—</span>
             </div>
           </template>
         </el-table-column>
@@ -91,7 +97,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="filteredBookings.length"
+          :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
           background
@@ -102,13 +108,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockBookings, mockRooms } from '../mock/data'
+import { getBookings, getBookingStats, cancelBooking as cancelBookingApi, checkinBooking } from '../api/bookings'
 
-const bookings = ref([...mockBookings])
-const allRooms = mockRooms
-
+const bookings = ref([])
+const total = ref(0)
 const search = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
@@ -116,68 +121,82 @@ const activeTab = ref('all')
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-const today = new Date().toISOString().slice(0, 10)
-
-function getWeekRange() {
-  const now = new Date()
-  const day = now.getDay() || 7
-  const mon = new Date(now); mon.setDate(now.getDate() - day + 1); mon.setHours(0,0,0,0)
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999)
-  return [mon.toISOString().slice(0,10), sun.toISOString().slice(0,10)]
-}
-const [weekStart, weekEnd] = getWeekRange()
-
-const todayCount = computed(() => bookings.value.filter(b => b.date === today).length)
-const weekCount  = computed(() => bookings.value.filter(b => b.date >= weekStart && b.date <= weekEnd).length)
-const checkedInCount = computed(() => bookings.value.filter(b => b.status === 'checkedin').length)
-const missedCount    = computed(() => bookings.value.filter(b => b.status === 'missed').length)
+const stats = ref({ todayCount: 0, weekCount: 0, totalCount: 0 })
 
 const tabs = computed(() => [
-  { value: 'today', label: '今日',   count: todayCount.value },
-  { value: 'week',  label: '本周',   count: weekCount.value },
-  { value: 'all',   label: '全部预约', count: bookings.value.length },
+  { value: 'today', label: '今日',    count: stats.value.todayCount },
+  { value: 'week',  label: '本周',    count: stats.value.weekCount },
+  { value: 'all',   label: '全部预约', count: stats.value.totalCount },
 ])
 
-const filteredBookings = computed(() => bookings.value.filter(b => {
-  if (activeTab.value === 'today' && b.date !== today) return false
-  if (activeTab.value === 'week'  && (b.date < weekStart || b.date > weekEnd)) return false
-  if (search.value && !b.studentName.includes(search.value) && !b.studentId.includes(search.value)) return false
-  if (statusFilter.value && b.status !== statusFilter.value) return false
-  if (dateFilter.value && activeTab.value === 'all' && b.date !== dateFilter.value) return false
-  return true
-}))
+async function loadBookings() {
+  try {
+    const data = await getBookings({
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      search: search.value,
+      status: statusFilter.value,
+      date: dateFilter.value,
+      tab: activeTab.value,
+    })
+    bookings.value = data.records || []
+    total.value = data.total || 0
+  } catch { bookings.value = [] }
+}
 
-watch([activeTab, search, statusFilter, dateFilter], () => { currentPage.value = 1 })
+async function loadStats() {
+  try { stats.value = await getBookingStats(activeTab.value) } catch {}
+}
 
-const pagedBookings = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredBookings.value.slice(start, start + pageSize.value)
-})
+watch([search, statusFilter, dateFilter], () => { currentPage.value = 1; loadBookings() })
+watch([currentPage, pageSize], loadBookings)
+
+onMounted(() => { loadBookings(); loadStats() })
 
 function switchTab(val) {
   activeTab.value = val
   if (val !== 'all') dateFilter.value = ''
+  currentPage.value = 1
+  loadBookings()
+  loadStats()
 }
 
 function statusText(s) {
-  return { confirmed: '待签到', checkedin: '已签到', cancelled: '已取消', missed: '已违约' }[s] || s
+  return {
+    pending_checkin: '待签到',
+    checked_in: '已签到',
+    completed: '已完成',
+    cancelled: '已取消',
+    violated: '已违约',
+  }[s] || s
 }
 
 function statusTagType(s) {
-  return { confirmed: 'primary', checkedin: 'success', cancelled: 'info', missed: 'danger' }[s] || ''
+  return {
+    pending_checkin: 'warning',
+    checked_in: 'success',
+    completed: 'info',
+    cancelled: 'info',
+    violated: 'danger',
+  }[s] || ''
 }
 
 async function cancelBooking(b) {
   try {
     await ElMessageBox.confirm(`确定取消 ${b.studentName} 的预约吗？`, '确认取消', { type: 'warning' })
-    b.status = 'cancelled'
+    await cancelBookingApi(b.id)
     ElMessage.success('预约已取消')
+    loadBookings()
+    loadStats()
   } catch {}
 }
 
 async function manualCheckIn(b) {
-  b.status = 'checkedin'
-  ElMessage.success('手动签到成功')
+  try {
+    await checkinBooking(b.id)
+    ElMessage.success('手动签到成功')
+    loadBookings()
+  } catch {}
 }
 
 </script>
@@ -342,6 +361,8 @@ async function manualCheckIn(b) {
 
 .student-name { font-size: 13.5px; font-weight: 600; color: #111827; }
 .student-id   { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.reservation-no { font-size: 12.5px; font-weight: 600; color: #475569; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.no-action { color: #cbd5e1; }
 
 .pagination-bar {
   display: flex;

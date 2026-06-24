@@ -89,14 +89,21 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { mockSettings } from '../mock/data'
+import { getSettings, updateSettings, getSettingsLogs } from '../api/settings'
 
-const settings = reactive({ ...mockSettings })
+const settings = reactive({
+  maxBookingHours: 4,
+  checkInWindowBefore: 10,
+  checkInWindowAfter: 15,
+  reminderMinutesBefore: 15,
+  violationLimit: 3,
+  suspendDays: 7,
+  allowWeekend: false,
+})
 const saving = ref(false)
-
-const defaultSettings = { ...mockSettings }
+const changeLogs = ref([])
 
 const paramSummary = computed(() => [
   { label: '最长预约时间', value: `${settings.maxBookingHours} 小时` },
@@ -107,22 +114,28 @@ const paramSummary = computed(() => [
   { label: '允许周末', value: settings.allowWeekend ? '是' : '否' },
 ])
 
-const changeLogs = [
-  { id: 1, user: '张管理', time: '2026-04-01 10:00', detail: '将最长预约时间从3小时改为4小时' },
-  { id: 2, user: '张管理', time: '2026-03-15 14:30', detail: '将封号阈值从5次改为3次' },
-  { id: 3, user: '李明', time: '2026-02-20 09:00', detail: '开启周末预约功能' },
-]
+onMounted(async () => {
+  try {
+    const [cfg, logs] = await Promise.all([getSettings(), getSettingsLogs()])
+    if (cfg) Object.assign(settings, cfg)
+    changeLogs.value = logs?.records || []
+  } catch {}
+})
 
 async function saveSettings() {
   saving.value = true
-  await new Promise(r => setTimeout(r, 800))
-  saving.value = false
-  ElMessage.success('系统参数已保存')
+  try {
+    await updateSettings({ ...settings })
+    ElMessage.success('系统参数已保存')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 function resetSettings() {
-  Object.assign(settings, defaultSettings)
-  ElMessage.info('已重置为默认参数')
+  ElMessage.info('请刷新页面获取当前参数')
 }
 </script>
 

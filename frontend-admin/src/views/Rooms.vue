@@ -147,7 +147,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="filteredRooms.length"
+          :total="roomsTotal"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
           background
@@ -160,6 +160,7 @@
       width="1100px"
       destroy-on-close
       class="seat-map-dialog"
+      @opened="computeStageScale"
     >
       <template #header>
         <div class="seat-dialog-header">
@@ -251,7 +252,7 @@
               </div>
             </div>
             <div v-if="layoutMode === 'edit'" class="edit-hint">
-              开启“新增座位”后，点击画布空白处即可落点
+              直接拖拽座位即可调整位置；开启“新增座位”后点击空白处可落点
             </div>
           </div>
 
@@ -259,7 +260,7 @@
             <span>讲台 / 前门方向</span>
           </div>
 
-          <div class="map-stage-scroll">
+          <div class="map-stage-scroll" ref="mapScrollRef" :style="{ height: scaledStageH + 'px' }">
             <div
               v-if="currentSeatMap"
               ref="mapStageRef"
@@ -278,10 +279,15 @@
                 class="seat-node"
                 :class="[
                   `seat-${seat.seat_status}`,
-                  { selected: selectedSeat?.id === seat.id, unbookable: !seat.is_bookable }
+                  {
+                    selected: selectedSeat?.id === seat.id,
+                    unbookable: !seat.is_bookable,
+                    dragging: draggingSeatId === seat.id,
+                  }
                 ]"
                 :style="seatStyle(seat)"
                 @click.stop="selectSeat(seat)"
+                @mousedown.stop="startDragSeat(seat, $event)"
               >
                 <span class="seat-node-label">{{ seat.display_label }}</span>
                 <span class="seat-node-code">{{ seat.seat_code }}</span>
@@ -326,8 +332,31 @@
                   <el-input-number v-model="mapForm.map_height" :min="300" :step="20" controls-position="right" style="width: 100%" />
                 </el-form-item>
               </div>
-              <el-form-item label="背景图地址">
-                <el-input v-model="mapForm.background_url" placeholder="可填写教室平面图 URL" />
+              <el-form-item label="教室背景图">
+                <div class="bg-uploader">
+                  <el-upload
+                    :auto-upload="false"
+                    :show-file-list="false"
+                    accept="image/*"
+                    :on-change="onPickBackground"
+                  >
+                    <el-button plain size="small">
+                      <el-icon><Picture /></el-icon>
+                      <span style="margin-left:4px">上传教室图</span>
+                    </el-button>
+                  </el-upload>
+                  <el-input
+                    v-model="mapForm.background_url"
+                    placeholder="或粘贴图片 URL"
+                    size="small"
+                    @change="applyBackground"
+                  />
+                </div>
+                <div class="bg-preview">
+                  <img :src="resolvedBg" alt="背景预览" />
+                  <el-button v-if="mapForm.background_url" text type="danger" size="small" @click="removeBackground">移除背景</el-button>
+                </div>
+                <div class="bg-hint">未设置或图片失效时使用默认教室图；座位会叠加在教室图上</div>
               </el-form-item>
               <el-form-item label="地图状态">
                 <el-select v-model="mapForm.map_status" style="width: 100%">
@@ -376,31 +405,6 @@
                   <el-option label="研讨座" value="group" />
                 </el-select>
               </el-form-item>
-
-              <div class="seat-grid">
-                <el-form-item label="行号">
-                  <el-input-number v-model="seatForm.row_no" :min="1" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="列号">
-                  <el-input-number v-model="seatForm.col_no" :min="1" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-              </div>
-
-              <div class="seat-grid">
-                <el-form-item label="X 坐标">
-                  <el-input-number v-model="seatForm.map_x" :min="0" :step="5" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="Y 坐标">
-                  <el-input-number v-model="seatForm.map_y" :min="0" :step="5" :disabled="layoutMode !== 'edit'" controls-position="right" style="width: 100%" />
-                </el-form-item>
-              </div>
-
-              <div v-if="layoutMode === 'edit'" class="nudge-row">
-                <el-button @click="nudgeSeat(0, -10)">上移</el-button>
-                <el-button @click="nudgeSeat(-10, 0)">左移</el-button>
-                <el-button @click="nudgeSeat(10, 0)">右移</el-button>
-                <el-button @click="nudgeSeat(0, 10)">下移</el-button>
-              </div>
 
               <div class="seat-grid">
                 <el-form-item label="宽度">
@@ -577,14 +581,17 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { mockRooms } from '../mock/data'
+import {
+  getRooms, createRoom, updateRoom, deleteRoom as deleteRoomApi, updateRoomStatus, getSeatMap,
+  updateSeat as updateSeatApi, addSeat as addSeatApi, deleteSeat as deleteSeatApi,
+  duplicateSeat as duplicateSeatApi, updateSeatMap as updateSeatMapApi,
+  publishSeatMap as publishSeatMapApi, createSeatMapDraft as createSeatMapDraftApi,
+} from '../api/rooms'
+import defaultClassroomBg from '../assets/classroom_background.png'
 
-const rooms = ref([...mockRooms.map((room) => ({
-  ...room,
-  room_status: room.room_status === 'draft' || room.room_status === 'closed' ? 'inactive' : room.room_status,
-}))])
+const rooms = ref([])
 
 const search = ref('')
 const campusFilter = ref('')
@@ -601,6 +608,22 @@ const onlyBookable = ref(false)
 const layoutMode = ref('view')
 const addSeatMode = ref(false)
 const mapStageRef = ref(null)
+const mapScrollRef = ref(null)
+const draggingSeatId = ref(null)
+const stageScale = ref(1)
+const stageWrapW = ref(0)
+const mapIsRemote = ref(false)   // 当前地图是否来自后端（可持久化）
+
+// 读取并校验当前 room/map 上下文；非后端地图给出提示
+function seatMapCtx() {
+  const roomId = currentRoom.value?.id
+  const mapId = currentSeatMap.value?.id
+  if (!mapIsRemote.value || !roomId || !mapId) {
+    ElMessage.warning('当前地图未在后端创建，请先点击“新建版本”')
+    return null
+  }
+  return { roomId, mapId }
+}
 
 const campusOptions = ['邯郸校区', '枫林校区', '江湾校区', '张江校区']
 const orgOptions = ['计算机学院', '信息工程学院', '数学学院', '物理学院', '化学学院', '医学院', '人文学院', '经济学院']
@@ -609,27 +632,38 @@ const roomTypeOptions = ['普通自习室', '大型自习室', '机构专属自�
 const form = reactive(defaultForm())
 const seatForm = reactive(defaultSeatForm())
 const mapForm = reactive(defaultMapForm())
-const seatMapsByRoom = reactive(createSeatMapsForRooms(rooms.value))
+const seatMapsByRoom = reactive({})
+const roomsTotal = ref(0)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-const filteredRooms = computed(() => rooms.value.filter((room) => {
-  if (search.value && !room.room_code.includes(search.value) && !room.room_name.includes(search.value)) return false
-  if (campusFilter.value && room.campus !== campusFilter.value) return false
-  if (visibilityFilter.value && room.visibility_scope !== visibilityFilter.value) return false
-  return true
-}))
+async function loadRooms() {
+  try {
+    const data = await getRooms({
+      page: currentPage.value, pageSize: pageSize.value,
+      search: search.value, campus: campusFilter.value,
+      visibilityScope: visibilityFilter.value,
+    })
+    rooms.value = data.records || []
+    roomsTotal.value = data.total || 0
+  } catch { rooms.value = [] }
+}
 
-watch([search, campusFilter, visibilityFilter], () => { currentPage.value = 1 })
-
-const pagedRooms = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredRooms.value.slice(start, start + pageSize.value)
+onMounted(() => {
+  loadRooms()
+  window.addEventListener('resize', computeStageScale)
 })
 
+const filteredRooms = computed(() => rooms.value)
+
+watch([search, campusFilter, visibilityFilter], () => { currentPage.value = 1; loadRooms() })
+watch([currentPage, pageSize], loadRooms)
+
+const pagedRooms = computed(() => filteredRooms.value)
+
 const stats = computed(() => ({
-  total: rooms.value.length,
+  total: roomsTotal.value,
   active: rooms.value.filter(r => r.room_status === 'active').length,
   capacity: rooms.value.reduce((sum, r) => sum + (r.total_capacity || 0), 0),
   inactive: rooms.value.filter(r => r.room_status !== 'active').length,
@@ -649,14 +683,61 @@ const seatSummary = computed(() => currentSeatMapSeats.value.reduce((summary, se
   return summary
 }, { active: 0, inactive: 0, maintenance: 0, bookable: 0 }))
 
+// 后端可能返回不存在的背景图路径（如 /static/...），加载失败则回退到默认教室图
+const resolvedBg = ref(defaultClassroomBg)
+
+function resolveBg(url) {
+  if (!url) {
+    resolvedBg.value = defaultClassroomBg
+    return
+  }
+  const img = new Image()
+  img.onload = () => { resolvedBg.value = url }
+  img.onerror = () => { resolvedBg.value = defaultClassroomBg }
+  img.src = url
+}
+
+watch(() => currentSeatMap.value?.background_url, resolveBg, { immediate: true })
+
+// 整张画布等比缩放以完整放入对话框（不出现内部滚动条）
+const scaledStageW = computed(() => Math.round((currentSeatMap.value?.map_width || 0) * stageScale.value))
+const scaledStageH = computed(() => Math.round((currentSeatMap.value?.map_height || 0) * stageScale.value))
+
+function computeStageScale() {
+  const el = mapScrollRef.value
+  if (!el || !currentSeatMap.value) return
+  stageWrapW.value = el.clientWidth
+  const availW = el.clientWidth - 4
+  const availH = window.innerHeight * 0.6   // 留出对话框头部/工具栏空间
+  const s = Math.min(
+    availW / currentSeatMap.value.map_width,
+    availH / currentSeatMap.value.map_height,
+    1, // 不放大，保持清晰
+  )
+  stageScale.value = Math.max(0.1, s)
+}
+
 const mapStageStyle = computed(() => {
   if (!currentSeatMap.value) return {}
+  // 教室背景图始终铺在画布上（contain 不裁切不变形）；未设置或加载失败用默认图
   return {
     width: `${currentSeatMap.value.map_width}px`,
     height: `${currentSeatMap.value.map_height}px`,
-    backgroundImage: currentSeatMap.value.background_url ? `url(${currentSeatMap.value.background_url})` : 'none',
+    transform: `scale(${stageScale.value})`,
+    transformOrigin: 'top left',
+    marginLeft: Math.max(0, (stageWrapW.value - 4 - scaledStageW.value) / 2) + 'px',
+    backgroundImage: `url(${resolvedBg.value})`,
+    backgroundSize: 'contain',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'center',
   }
 })
+
+// 画布尺寸变化时重新计算适配（对话框打开由 @opened 触发，窗口缩放由 resize 触发）
+watch(
+  () => [currentSeatMap.value?.map_width, currentSeatMap.value?.map_height],
+  () => nextTick(computeStageScale),
+)
 
 function defaultForm() {
   return {
@@ -796,8 +877,11 @@ function seatStatusType(value) {
   return { active: 'success', inactive: 'info', maintenance: 'warning' }[value] ?? 'info'
 }
 
-function onStatusChange(room) {
-  ElMessage.success(`《${room.room_name}》已${room.room_status === 'active' ? '启用' : '停用'}`)
+async function onStatusChange(room) {
+  try {
+    await updateRoomStatus(room.id, room.room_status)
+    ElMessage.success(`《${room.room_name}》已${room.room_status === 'active' ? '启用' : '停用'}`)
+  } catch { loadRooms() }
 }
 
 function openDialog(room = null) {
@@ -806,39 +890,61 @@ function openDialog(room = null) {
   dialogVisible.value = true
 }
 
-function saveRoom() {
+async function saveRoom() {
   if (!form.room_code || !form.room_name || !form.building) {
     ElMessage.warning('请填写房间编码、名称和楼栋')
     return
   }
-
-  if (editingRoom.value) {
-    Object.assign(editingRoom.value, { ...form })
-    ElMessage.success('自习室信息已更新')
-  } else {
-    const newRoom = { id: Date.now(), ...form, created_at: new Date().toISOString().slice(0, 10) }
-    rooms.value.push(newRoom)
-    seatMapsByRoom[newRoom.id] = buildMockSeatMap(newRoom, rooms.value.length)
-    ElMessage.success('自习室已创建')
-  }
-
-  dialogVisible.value = false
+  try {
+    if (editingRoom.value) {
+      await updateRoom(editingRoom.value.id, form)
+      ElMessage.success('自习室信息已更新')
+    } else {
+      await createRoom(form)
+      ElMessage.success('自习室已创建')
+    }
+    dialogVisible.value = false
+    loadRooms()
+  } catch {}
 }
 
-function viewSeatMap(room) {
-  if (!seatMapsByRoom[room.id]) {
-    seatMapsByRoom[room.id] = buildMockSeatMap(room, rooms.value.findIndex((item) => item.id === room.id))
-  }
+async function viewSeatMap(room) {
   currentRoom.value = room
-  currentSeatMap.value = seatMapsByRoom[room.id]
+  currentSeatMap.value = null
   layoutMode.value = 'view'
   addSeatMode.value = false
   selectedSeat.value = null
   seatStatusFilter.value = ''
   onlyBookable.value = false
   Object.assign(seatForm, defaultSeatForm())
-  syncMapForm()
   seatMapVisible.value = true
+  try {
+    const map = await getSeatMap(room.id)
+    if (map && map.id) {
+      seatMapsByRoom[room.id] = map
+      currentSeatMap.value = map
+      mapIsRemote.value = true
+      syncMapForm()
+    } else if (seatMapsByRoom[room.id]) {
+      currentSeatMap.value = seatMapsByRoom[room.id]
+      mapIsRemote.value = false
+      syncMapForm()
+    } else {
+      const mockMap = buildMockSeatMap(room, 0)
+      seatMapsByRoom[room.id] = mockMap
+      currentSeatMap.value = mockMap
+      mapIsRemote.value = false
+      syncMapForm()
+    }
+  } catch {
+    if (!seatMapsByRoom[room.id]) {
+      const mockMap = buildMockSeatMap(room, 0)
+      seatMapsByRoom[room.id] = mockMap
+    }
+    currentSeatMap.value = seatMapsByRoom[room.id]
+    mapIsRemote.value = false
+    syncMapForm()
+  }
 }
 
 function syncMapForm() {
@@ -886,7 +992,7 @@ function setSeatStatus(status) {
   seatForm.seat_status = status
 }
 
-function saveSeatConfig() {
+async function saveSeatConfig() {
   if (!selectedSeat.value) {
     ElMessage.warning('请先选择一个座位')
     return
@@ -910,70 +1016,138 @@ function saveSeatConfig() {
     map_rotation: seatForm.map_rotation,
   })
 
-  markMapDraft()
-  ElMessage.success(`座位 ${selectedSeat.value.seat_code} 设置已保存`)
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  try {
+    await updateSeatApi(ctx.roomId, ctx.mapId, selectedSeat.value.id, selectedSeat.value)
+    markMapDraft()
+    ElMessage.success(`座位 ${selectedSeat.value.seat_code} 设置已保存`)
+  } catch { /* 错误已由拦截器提示 */ }
 }
 
-function applyMapSettings() {
+// 将地图配置表单同步到本地 currentSeatMap（不弹提示）
+function syncMapConfigLocal() {
   if (!currentSeatMap.value) return
   currentSeatMap.value.background_url = mapForm.background_url.trim()
   currentSeatMap.value.map_width = mapForm.map_width
   currentSeatMap.value.map_height = mapForm.map_height
   currentSeatMap.value.map_status = mapForm.map_status
-  ElMessage.success('地图配置已应用')
 }
 
-function saveLayoutDraft() {
-  if (!currentSeatMap.value) return
-  applyMapSettings()
-  currentSeatMap.value.map_status = 'draft'
-  mapForm.map_status = 'draft'
-  ElMessage.success('布局草稿已保存')
+async function applyMapSettings() {
+  syncMapConfigLocal()
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  try {
+    await updateSeatMapApi(ctx.roomId, ctx.mapId, mapConfigPayload())
+    ElMessage.success('地图配置已应用')
+  } catch { /* 错误已由拦截器提示 */ }
 }
 
-function publishCurrentMap() {
-  if (!currentSeatMap.value) return
-  applyMapSettings()
-  currentSeatMap.value.map_status = 'published'
-  currentSeatMap.value.published_at = new Date().toISOString().slice(0, 19).replace('T', ' ')
-  mapForm.map_status = 'published'
-  ElMessage.success('当前布局版本已发布')
-}
-
-function createNewMapVersion() {
-  if (!currentSeatMap.value) return
-  const clonedSeats = currentSeatMap.value.seats.map((seat) => ({ ...seat, id: Date.now() + Math.floor(Math.random() * 1000) }))
-  currentSeatMap.value = {
-    ...currentSeatMap.value,
-    id: Date.now(),
-    version_no: currentSeatMap.value.version_no + 1,
-    map_status: 'draft',
-    published_at: null,
-    seats: clonedSeats,
+// ── 教室背景图 ──
+function onPickBackground(uploadFile) {
+  const file = uploadFile.raw || uploadFile
+  if (!file || !file.type?.startsWith('image/')) {
+    ElMessage.warning('请选择图片文件')
+    return
   }
-  seatMapsByRoom[currentRoom.value.id] = currentSeatMap.value
-  syncMapForm()
-  selectedSeat.value = null
-  addSeatMode.value = false
-  ElMessage.success('已基于当前布局创建新的草稿版本')
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.warning('图片过大，建议小于 5MB')
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    mapForm.background_url = reader.result // base64 data URL，无需后端
+    applyBackground()
+    ElMessage.success('教室背景图已设置')
+  }
+  reader.readAsDataURL(file)
+}
+
+function applyBackground() {
+  if (!currentSeatMap.value) return
+  currentSeatMap.value.background_url = (mapForm.background_url || '').trim()
+  markMapDraft()
+}
+
+function removeBackground() {
+  mapForm.background_url = ''
+  applyBackground()
+}
+
+function mapConfigPayload() {
+  // updateSeatMap / createSeatMapDraft 不走 transformer，需 camelCase
+  return {
+    mapWidth: mapForm.map_width,
+    mapHeight: mapForm.map_height,
+    backgroundUrl: (mapForm.background_url || '').trim(),
+  }
+}
+
+async function saveLayoutDraft() {
+  if (!currentSeatMap.value) return
+  syncMapConfigLocal()
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  try {
+    await updateSeatMapApi(ctx.roomId, ctx.mapId, mapConfigPayload())
+    currentSeatMap.value.map_status = 'draft'
+    mapForm.map_status = 'draft'
+    ElMessage.success('布局草稿已保存')
+  } catch { /* 错误已由拦截器提示 */ }
+}
+
+async function publishCurrentMap() {
+  if (!currentSeatMap.value) return
+  syncMapConfigLocal()
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  try {
+    // 先保存地图配置（宽高/背景），再发布
+    await updateSeatMapApi(ctx.roomId, ctx.mapId, mapConfigPayload())
+    await publishSeatMapApi(ctx.roomId, ctx.mapId)
+    currentSeatMap.value.map_status = 'published'
+    currentSeatMap.value.published_at = new Date().toISOString().slice(0, 19).replace('T', ' ')
+    mapForm.map_status = 'published'
+    ElMessage.success('当前布局版本已发布')
+  } catch { /* 错误已由拦截器提示 */ }
+}
+
+async function createNewMapVersion() {
+  if (!currentSeatMap.value || !currentRoom.value) return
+  try {
+    const newMap = await createSeatMapDraftApi(currentRoom.value.id, mapConfigPayload())
+    if (newMap && newMap.id) {
+      currentSeatMap.value = newMap
+      seatMapsByRoom[currentRoom.value.id] = newMap
+      mapIsRemote.value = true
+      syncMapForm()
+      selectedSeat.value = null
+      addSeatMode.value = false
+      nextTick(computeStageScale)
+      ElMessage.success(`已创建新的草稿版本 V${newMap.version_no}`)
+    }
+  } catch { /* 错误已由拦截器提示 */ }
 }
 
 function toggleAddSeatMode() {
   addSeatMode.value = !addSeatMode.value
 }
 
-function onMapStageClick(event) {
+async function onMapStageClick(event) {
   if (layoutMode.value !== 'edit' || !addSeatMode.value || !currentSeatMap.value || !mapStageRef.value) return
 
   const rect = mapStageRef.value.getBoundingClientRect()
-  const x = Math.max(20, Math.min(event.clientX - rect.left - 22, currentSeatMap.value.map_width - 70))
-  const y = Math.max(40, Math.min(event.clientY - rect.top - 22, currentSeatMap.value.map_height - 70))
+  // rect 为缩放后的可视尺寸，需除以 stageScale 换算回画布坐标
+  const localX = (event.clientX - rect.left) / stageScale.value
+  const localY = (event.clientY - rect.top) / stageScale.value
+  const x = Math.max(20, Math.min(localX - 22, currentSeatMap.value.map_width - 70))
+  const y = Math.max(40, Math.min(localY - 22, currentSeatMap.value.map_height - 70))
   const nextIndex = currentSeatMap.value.seats.length + 1
   const nextRow = Math.floor((nextIndex - 1) / 10) + 1
   const nextCol = ((nextIndex - 1) % 10) + 1
   const seatCode = `${String.fromCharCode(64 + Math.min(nextRow, 26))}${String(nextCol).padStart(2, '0')}`
   const newSeat = {
-    id: Date.now(),
     study_room_id: currentRoom.value.id,
     seat_code: seatCode,
     display_label: `新座位 ${nextIndex}`,
@@ -990,47 +1164,123 @@ function onMapStageClick(event) {
     map_width: 44,
     map_height: 44,
     map_rotation: 0,
-    metadata_json: null,
   }
 
-  currentSeatMap.value.seats.push(newSeat)
-  currentRoom.value.total_capacity = currentSeatMap.value.seats.length
-  selectSeat(newSeat)
-  markMapDraft()
-  addSeatMode.value = false
-  ElMessage.success('新座位已添加到布局草稿')
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  try {
+    const created = await addSeatApi(ctx.roomId, ctx.mapId, newSeat)
+    currentSeatMap.value.seats.push(created)
+    currentRoom.value.total_capacity = currentSeatMap.value.seats.length
+    selectSeat(created)
+    markMapDraft()
+    addSeatMode.value = false
+    ElMessage.success('新座位已添加')
+  } catch { /* 错误已由拦截器提示 */ }
 }
 
-function nudgeSeat(dx, dy) {
-  seatForm.map_x = Math.max(0, seatForm.map_x + dx)
-  seatForm.map_y = Math.max(0, seatForm.map_y + dy)
+// ── 座位拖拽摆放 ──
+// map-stage 经过 stageScale 缩放，屏幕位移需除以缩放系数换算回画布坐标
+let dragState = null
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(value, max))
 }
 
-function duplicateSeat() {
-  if (!selectedSeat.value || !currentSeatMap.value) return
-  const cloned = {
-    ...selectedSeat.value,
-    id: Date.now(),
-    seat_code: `${selectedSeat.value.seat_code}-C`,
-    display_label: `${selectedSeat.value.display_label} 副本`,
-    map_x: Number(selectedSeat.value.map_x) + 56,
-    map_y: Number(selectedSeat.value.map_y) + 10,
+function startDragSeat(seat, event) {
+  if (layoutMode.value !== 'edit' || addSeatMode.value || !currentSeatMap.value) return
+  selectSeat(seat)
+  dragState = {
+    seat,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: Number(seat.map_x),
+    originY: Number(seat.map_y),
+    moved: false,
   }
-  currentSeatMap.value.seats.push(cloned)
-  currentRoom.value.total_capacity = currentSeatMap.value.seats.length
-  selectSeat(cloned)
-  markMapDraft()
-  ElMessage.success('已复制一个座位')
+  document.addEventListener('mousemove', onDragMove)
+  document.addEventListener('mouseup', endDragSeat)
 }
 
-function removeSeat() {
+function onDragMove(event) {
+  if (!dragState) return
+  const dx = (event.clientX - dragState.startX) / stageScale.value
+  const dy = (event.clientY - dragState.startY) / stageScale.value
+  if (!dragState.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+    dragState.moved = true
+    draggingSeatId.value = dragState.seat.id
+  }
+  if (!dragState.moved) return
+  const seat = dragState.seat
+  const maxX = (currentSeatMap.value.map_width || 0) - Number(seat.map_width)
+  const maxY = (currentSeatMap.value.map_height || 0) - Number(seat.map_height)
+  seat.map_x = Math.round(clamp(dragState.originX + dx, 0, Math.max(0, maxX)))
+  seat.map_y = Math.round(clamp(dragState.originY + dy, 0, Math.max(0, maxY)))
+  // 同步表单（坐标不展示，但保存/复制仍需）
+  if (selectedSeat.value?.id === seat.id) {
+    seatForm.map_x = seat.map_x
+    seatForm.map_y = seat.map_y
+  }
+}
+
+async function endDragSeat() {
+  document.removeEventListener('mousemove', onDragMove)
+  document.removeEventListener('mouseup', endDragSeat)
+  const seat = dragState?.seat
+  const moved = dragState?.moved
+  draggingSeatId.value = null
+  dragState = null
+  if (moved && seat) {
+    markMapDraft()
+    // 拖拽后持久化新位置（仅对后端地图，避免频繁提示）
+    if (mapIsRemote.value && currentRoom.value?.id && currentSeatMap.value?.id) {
+      try {
+        await updateSeatApi(currentRoom.value.id, currentSeatMap.value.id, seat.id, seat)
+      } catch { /* 拦截器已提示 */ }
+    }
+  }
+}
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onDragMove)
+  document.removeEventListener('mouseup', endDragSeat)
+  window.removeEventListener('resize', computeStageScale)
+})
+
+async function duplicateSeat() {
   if (!selectedSeat.value || !currentSeatMap.value) return
-  currentSeatMap.value.seats = currentSeatMap.value.seats.filter((seat) => seat.id !== selectedSeat.value.id)
-  currentRoom.value.total_capacity = currentSeatMap.value.seats.length
-  selectedSeat.value = null
-  Object.assign(seatForm, defaultSeatForm())
-  markMapDraft()
-  ElMessage.success('座位已从当前布局中删除')
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  const source = selectedSeat.value
+  // duplicate 接口 body 为 snake_case（后端 body.get("map_x")）
+  const pos = {
+    map_x: Number(source.map_x) + 56,
+    map_y: Number(source.map_y) + 10,
+  }
+  try {
+    const created = await duplicateSeatApi(ctx.roomId, ctx.mapId, source.id, pos)
+    currentSeatMap.value.seats.push(created)
+    currentRoom.value.total_capacity = currentSeatMap.value.seats.length
+    selectSeat(created)
+    markMapDraft()
+    ElMessage.success('已复制一个座位')
+  } catch { /* 错误已由拦截器提示 */ }
+}
+
+async function removeSeat() {
+  if (!selectedSeat.value || !currentSeatMap.value) return
+  const ctx = seatMapCtx()
+  if (!ctx) return
+  const seatId = selectedSeat.value.id
+  try {
+    await deleteSeatApi(ctx.roomId, ctx.mapId, seatId)
+    currentSeatMap.value.seats = currentSeatMap.value.seats.filter((seat) => seat.id !== seatId)
+    currentRoom.value.total_capacity = currentSeatMap.value.seats.length
+    selectedSeat.value = null
+    Object.assign(seatForm, defaultSeatForm())
+    markMapDraft()
+    ElMessage.success('座位已删除')
+  } catch { /* 错误已由拦截器提示 */ }
 }
 
 function markMapDraft() {
@@ -1042,9 +1292,10 @@ function markMapDraft() {
 async function deleteRoom(room) {
   try {
     await ElMessageBox.confirm(`确定要删除《${room.room_name}》吗？`, '删除确认', { type: 'warning' })
-    rooms.value = rooms.value.filter((item) => item.id !== room.id)
+    await deleteRoomApi(room.id)
     delete seatMapsByRoom[room.id]
     ElMessage.success('自习室已删除')
+    loadRooms()
   } catch {}
 }
 </script>
@@ -1369,8 +1620,7 @@ async function deleteRoom(room) {
 }
 
 .map-stage-scroll {
-  overflow: auto;
-  padding-bottom: 6px;
+  overflow: hidden;
 }
 
 .map-stage {
@@ -1378,24 +1628,24 @@ async function deleteRoom(room) {
   min-width: max-content;
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.99)),
     repeating-linear-gradient(
       90deg,
-      rgba(148, 163, 184, 0.08) 0,
-      rgba(148, 163, 184, 0.08) 1px,
+      rgba(148, 163, 184, 0.04) 0,
+      rgba(148, 163, 184, 0.04) 1px,
       transparent 1px,
-      transparent 48px
+      transparent 40px
     ),
     repeating-linear-gradient(
       0deg,
-      rgba(148, 163, 184, 0.08) 0,
-      rgba(148, 163, 184, 0.08) 1px,
+      rgba(148, 163, 184, 0.04) 0,
+      rgba(148, 163, 184, 0.04) 1px,
       transparent 1px,
-      transparent 48px
+      transparent 40px
     );
   background-size: cover;
   background-position: center;
-  border: 1px solid #dbe3f0;
+  border: 1px solid #e3e9f3;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
@@ -1443,19 +1693,35 @@ async function deleteRoom(room) {
   border-radius: 10px;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.map-stage.editable .seat-node {
+  cursor: grab;
 }
 
 .seat-node:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
+  z-index: 4;
 }
 
 .seat-node.selected {
-  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline: 3px solid rgba(37, 99, 235, 0.22);
   border-color: #2563eb;
-  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+  z-index: 5;
+}
+
+.seat-node.dragging {
+  cursor: grabbing;
+  transform: scale(1.06);
+  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.3);
+  opacity: 0.92;
+  z-index: 9;
+  transition: none;
 }
 
 .seat-node.unbookable::after {
@@ -1554,6 +1820,39 @@ async function deleteRoom(room) {
   margin-bottom: 10px;
 }
 
+.bg-uploader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.bg-uploader .el-input {
+  flex: 1;
+}
+
+.bg-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.bg-preview img {
+  width: 88px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e3e9f3;
+  background: #f1f5f9;
+}
+
+.bg-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .seat-profile {
   display: flex;
   align-items: flex-start;
@@ -1593,13 +1892,6 @@ async function deleteRoom(room) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-}
-
-.nudge-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
 }
 
 .feature-list {

@@ -143,15 +143,15 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Bell, Plus, Search, StarFilled, Document,
   Edit, Delete, Promotion, User, Clock,
 } from '@element-plus/icons-vue'
-import { mockNotices } from '../mock/data'
+import { getNotices, createNotice, updateNotice, deleteNotice as deleteNoticeApi, publishNotice } from '../api/notices'
 
-const notices = ref([...mockNotices])
+const notices = ref([])
 const search = ref('')
 const filterType = ref('')
 const selectedId = ref(null)
@@ -171,19 +171,31 @@ const filteredNotices = computed(() => {
   const list = notices.value.filter(n => {
     if (search.value) {
       const q = search.value.toLowerCase()
-      if (!n.title.toLowerCase().includes(q) && !n.content.toLowerCase().includes(q)) return false
+      if (!n.title?.toLowerCase().includes(q) && !n.content?.toLowerCase().includes(q)) return false
     }
     if (filterType.value && n.type !== filterType.value) return false
     return true
   })
   return list.sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-    return (b.publishedAt || b.createdAt).localeCompare(a.publishedAt || a.createdAt)
+    return String(b.publishedAt || b.createdAt).localeCompare(String(a.publishedAt || a.createdAt))
   })
 })
 
 const selected = computed(() => notices.value.find(n => n.id === selectedId.value))
 const dialogTitle = computed(() => dialogMode.value === 'edit' ? '编辑公告' : '发布公告')
+
+async function loadNotices() {
+  try {
+    const data = await getNotices({ page: 1, pageSize: 200 })
+    notices.value = data.records || data || []
+    if (!selectedId.value && filteredNotices.value.length) {
+      selectedId.value = filteredNotices.value[0]?.id ?? null
+    }
+  } catch { notices.value = [] }
+}
+
+onMounted(loadNotices)
 
 function countByType(type) {
   return notices.value.filter(n => n.type === type).length
@@ -213,50 +225,29 @@ function openEdit(n) {
   dialogVisible.value = true
 }
 
-function saveNotice(status) {
+async function saveNotice(status) {
   if (!form.title.trim()) { ElMessage.warning('请填写公告标题'); return }
   if (!form.content.trim()) { ElMessage.warning('请填写公告内容'); return }
-  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
-
-  if (dialogMode.value === 'create') {
-    const newNotice = {
-      id: Date.now(),
-      title: form.title,
-      content: form.content,
-      type: form.type,
-      pinned: form.pinned,
-      status,
-      author: '张管理',
-      publishedAt: status === 'published' ? now : null,
-      createdAt: now,
+  const payload = { title: form.title, content: form.content, type: form.type, pinned: form.pinned, status }
+  try {
+    if (dialogMode.value === 'create') {
+      await createNotice(payload)
+    } else {
+      await updateNotice(selectedId.value, payload)
     }
-    notices.value.unshift(newNotice)
-    selectedId.value = newNotice.id
-  } else {
-    const idx = notices.value.findIndex(n => n.id === selectedId.value)
-    if (idx !== -1) {
-      Object.assign(notices.value[idx], {
-        title: form.title,
-        content: form.content,
-        type: form.type,
-        pinned: form.pinned,
-        status,
-        publishedAt: status === 'published' ? (notices.value[idx].publishedAt || now) : null,
-      })
-    }
-  }
-  ElMessage.success(status === 'published' ? '公告已发布' : '已保存为草稿')
-  dialogVisible.value = false
+    ElMessage.success(status === 'published' ? '公告已发布' : '已保存为草稿')
+    dialogVisible.value = false
+    loadNotices()
+  } catch {}
 }
 
-function publish(n) {
-  const idx = notices.value.findIndex(x => x.id === n.id)
-  if (idx !== -1) {
-    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
-    notices.value[idx].status = 'published'
-    notices.value[idx].publishedAt = now
+async function publish(n) {
+  try {
+    await publishNotice(n.id)
+    const idx = notices.value.findIndex(x => x.id === n.id)
+    if (idx !== -1) notices.value[idx].status = 'published'
     ElMessage.success('公告已发布')
-  }
+  } catch {}
 }
 
 function deleteNotice(n) {
@@ -264,14 +255,15 @@ function deleteNotice(n) {
     type: 'warning',
     confirmButtonText: '删除',
     confirmButtonClass: 'el-button--danger',
-  }).then(() => {
-    notices.value = notices.value.filter(x => x.id !== n.id)
-    if (selectedId.value === n.id) selectedId.value = null
-    ElMessage.success('已删除')
+  }).then(async () => {
+    try {
+      await deleteNoticeApi(n.id)
+      if (selectedId.value === n.id) selectedId.value = null
+      ElMessage.success('已删除')
+      loadNotices()
+    } catch {}
   }).catch(() => {})
 }
-
-if (notices.value.length) selectedId.value = filteredNotices.value[0]?.id ?? null
 </script>
 
 <style scoped>

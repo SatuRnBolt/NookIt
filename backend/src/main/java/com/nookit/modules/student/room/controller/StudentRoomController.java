@@ -1,0 +1,134 @@
+package com.nookit.modules.student.room.controller;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.nookit.common.api.PageResult;
+import com.nookit.common.api.Result;
+import com.nookit.common.domain.reservation.Reservation;
+import com.nookit.common.domain.seat.Seat;
+import com.nookit.modules.admin.booking.mapper.BookingMapper;
+import com.nookit.modules.admin.room.dto.RoomPageQuery;
+import com.nookit.modules.admin.room.dto.RoomVO;
+import com.nookit.modules.admin.room.dto.SeatMapVO;
+import com.nookit.modules.admin.room.mapper.SeatMapper;
+import com.nookit.modules.admin.room.service.RoomService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/student")
+@RequiredArgsConstructor
+@Tag(name = "Student-Room", description = "学生端自习室浏览")
+public class StudentRoomController {
+
+    private final RoomService roomService;
+    private final SeatMapper seatMapper;
+    private final BookingMapper bookingMapper;
+
+    @GetMapping("/rooms")
+    @Operation(summary = "自习室列表（仅开放中）")
+    public Result<PageResult<RoomVO>> listRooms(RoomPageQuery query) {
+        return Result.success(roomService.pageRooms(query));
+    }
+
+    @GetMapping("/rooms/{id}")
+    @Operation(summary = "自习室详情")
+    public Result<RoomVO> getRoom(@PathVariable Long id) {
+        return Result.success(roomService.getRoomById(id));
+    }
+
+    @GetMapping("/seats/{seatId}")
+    @Operation(summary = "座位详情")
+    public Result<Map<String, Object>> getSeat(@PathVariable Long seatId) {
+        Seat seat = seatMapper.selectById(seatId);
+        if (seat == null) {
+            return Result.success(null);
+        }
+
+        RoomVO room = roomService.getRoomById(seat.getStudyRoomId());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", seat.getId());
+        result.put("seatCode", seat.getSeatCode());
+        result.put("displayLabel", seat.getDisplayLabel());
+        result.put("seatType", seat.getSeatType());
+        result.put("rowNo", seat.getRowNo());
+        result.put("colNo", seat.getColNo());
+        result.put("hasPower", seat.getHasPower());
+        result.put("isWindowSide", seat.getIsWindowSide());
+        result.put("isAccessible", seat.getIsAccessible());
+        result.put("seatStatus", seat.getSeatStatus());
+        result.put("isBookable", seat.getIsBookable());
+        result.put("roomId", room != null ? room.getId() : seat.getStudyRoomId());
+        result.put("roomName", room != null ? room.getRoomName() : null);
+        result.put("roomDisplayName", room != null ? room.getDisplayName() : null);
+        result.put("locationDetail", room != null ? room.getLocationDetail() : null);
+        return Result.success(result);
+    }
+
+    @GetMapping("/rooms/{roomId}/seatmap")
+    @Operation(summary = "座位地图")
+    public Result<SeatMapVO> getSeatMap(@PathVariable Long roomId) {
+        SeatMapVO map = roomService.getSeatMap(roomId, null);
+        if (map == null) {
+            return Result.success(null);
+        }
+        // merge real-time occupied status from today's reservations
+        String today = LocalDate.now().toString();
+        Set<Long> occupiedSeatIds = bookingMapper.selectList(
+                new LambdaQueryWrapper<Reservation>()
+                        .eq(Reservation::getStudyRoomId, roomId)
+                        .eq(Reservation::getReservationDate, today)
+                        .notIn(Reservation::getReservationStatus, "cancelled", "completed")
+        ).stream().map(Reservation::getSeatId).collect(Collectors.toSet());
+
+        if (map.getSeats() != null) {
+            map.getSeats().forEach(s -> {
+                if (occupiedSeatIds.contains(s.getId())) {
+                    s.setSeatStatus("occupied");
+                    s.setIsBookable(false);
+                }
+            });
+        }
+        return Result.success(map);
+    }
+
+    @GetMapping("/seats/{seatId}/slots")
+    @Operation(summary = "查询座位已占用时段")
+    public Result<Map<String, Object>> getOccupiedSlots(@PathVariable Long seatId,
+                                                        @RequestParam String date) {
+        Seat seat = seatMapper.selectById(seatId);
+        if (seat == null) {
+            return Result.success(Map.of("occupiedSlots", List.of()));
+        }
+
+        List<Reservation> reservations = bookingMapper.selectList(
+                new LambdaQueryWrapper<Reservation>()
+                        .eq(Reservation::getSeatId, seatId)
+                        .eq(Reservation::getReservationDate, LocalDate.parse(date))
+                        .notIn(Reservation::getReservationStatus, "cancelled")
+        );
+
+        // 返回半小时槽索引：0=7:00, 1=7:30, ..., 29=21:30
+        Set<Integer> occupied = new TreeSet<>();
+        for (Reservation r : reservations) {
+            if (r.getStartAt() == null || r.getEndAt() == null) continue;
+            java.time.LocalTime cur = r.getStartAt().toLocalTime();
+            java.time.LocalTime end = r.getEndAt().toLocalTime();
+            while (cur.isBefore(end)) {
+                int slotIndex = (cur.getHour() - 7) * 2 + (cur.getMinute() >= 30 ? 1 : 0);
+                if (slotIndex >= 0 && slotIndex <= 29) occupied.add(slotIndex);
+                cur = cur.plusMinutes(30);
+            }
+        }
+
+        return Result.success(Map.of(
+                "occupiedSlots", new ArrayList<>(occupied),
+                "occupied", new ArrayList<>(occupied)
+        ));
+    }
+}

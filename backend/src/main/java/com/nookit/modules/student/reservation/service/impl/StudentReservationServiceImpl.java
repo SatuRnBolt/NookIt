@@ -1,0 +1,239 @@
+package com.nookit.modules.student.reservation.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.nookit.common.api.PageResult;
+import com.nookit.common.api.ResultCode;
+import com.nookit.common.domain.reservation.Reservation;
+import com.nookit.common.domain.seat.Seat;
+import com.nookit.common.domain.space.StudyRoom;
+import com.nookit.common.exception.BusinessException;
+import com.nookit.modules.admin.booking.mapper.BookingMapper;
+import com.nookit.modules.admin.room.mapper.RoomMapper;
+import com.nookit.modules.admin.room.mapper.SeatMapper;
+import com.nookit.modules.student.reservation.dto.CreateReservationReq;
+import com.nookit.common.util.DateUtil;
+import com.nookit.modules.student.reservation.service.StudentReservationService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class StudentReservationServiceImpl implements StudentReservationService {
+
+    private final BookingMapper bookingMapper;
+    private final SeatMapper seatMapper;
+    private final RoomMapper roomMapper;
+
+    private Map<String, Object> toReservationView(Reservation reservation,
+                                                  Map<Long, StudyRoom> roomMap,
+                                                  Map<Long, Seat> seatMap) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", reservation.getId());
+
+        StudyRoom room = roomMap.get(reservation.getStudyRoomId());
+        result.put("roomName", room != null ? room.getRoomName() : null);
+        result.put("room_name", room != null ? room.getRoomName() : null);
+
+        Seat seat = seatMap.get(reservation.getSeatId());
+        result.put("seatId", reservation.getSeatId());
+        result.put("seat_id", reservation.getSeatId());
+        result.put("seatCode", seat != null ? seat.getSeatCode() : null);
+        result.put("seat_code", seat != null ? seat.getSeatCode() : null);
+
+        String date = reservation.getReservationDate() != null ? reservation.getReservationDate().toString() : null;
+        result.put("date", date);
+        result.put("reservation_date", date);
+
+        String startTime = reservation.getStartAt() != null ? reservation.getStartAt().toLocalTime().toString().substring(0, 5) : null;
+        String endTime = reservation.getEndAt() != null ? reservation.getEndAt().toLocalTime().toString().substring(0, 5) : null;
+        result.put("startTime", startTime);
+        result.put("start_time", startTime);
+        result.put("endTime", endTime);
+        result.put("end_time", endTime);
+
+        result.put("status", reservation.getReservationStatus());
+        result.put("reservation_status", reservation.getReservationStatus());
+        result.put("checkinCode", reservation.getNotesText());
+        result.put("checkin_code", reservation.getNotesText());
+        result.put("code", reservation.getNotesText());
+        return result;
+    }
+
+    @Override
+    public PageResult<Map<String, Object>> listMyReservations(Long userId, int page, int pageSize, String status) {
+        LambdaQueryWrapper<Reservation> wrapper = new LambdaQueryWrapper<Reservation>()
+                .eq(Reservation::getUserId, userId)
+                .eq(status != null && !status.isEmpty(), Reservation::getReservationStatus, status)
+                .orderByDesc(Reservation::getCreatedAt);
+
+        Page<Reservation> pg = bookingMapper.selectPage(new Page<>(page, pageSize), wrapper);
+
+        // collect room/seat ids for batch lookup
+        Set<Long> roomIds = pg.getRecords().stream().map(Reservation::getStudyRoomId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> seatIds = pg.getRecords().stream().map(Reservation::getSeatId).filter(Objects::nonNull).collect(Collectors.toSet());
+
+        Map<Long, StudyRoom> roomMap = roomIds.isEmpty() ? Map.of() :
+                roomMapper.selectBatchIds(roomIds).stream().collect(Collectors.toMap(StudyRoom::getId, r -> r));
+        Map<Long, Seat> seatMap = seatIds.isEmpty() ? Map.of() :
+                seatMapper.selectBatchIds(seatIds).stream().collect(Collectors.toMap(Seat::getId, s -> s));
+
+        List<Map<String, Object>> records = pg.getRecords().stream()
+                .map(r -> toReservationView(r, roomMap, seatMap))
+                .collect(Collectors.toList());
+
+        return PageResult.of(records, pg.getTotal(), pg.getCurrent(), pg.getSize());
+    }
+
+    @Override
+    public Map<String, Object> getReservationDetail(Long userId, Long reservationId) {
+        Reservation reservation = bookingMapper.selectById(reservationId);
+        if (reservation == null || !reservation.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.RESERVATION_NOT_FOUND);
+        }
+
+        StudyRoom room = roomMapper.selectById(reservation.getStudyRoomId());
+        Seat seat = seatMapper.selectById(reservation.getSeatId());
+
+        return toReservationView(
+                reservation,
+                room == null ? Map.of() : Map.of(room.getId(), room),
+                seat == null ? Map.of() : Map.of(seat.getId(), seat)
+        );
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> createReservation(Long userId, CreateReservationReq req) {
+        Seat seat = seatMapper.selectById(req.getSeatId());
+        if (seat == null) {
+            throw new BusinessException(ResultCode.SEAT_NOT_FOUND);
+        }
+        if (!Boolean.TRUE.equals(seat.getIsBookable())) {
+            throw new BusinessException(ResultCode.SEAT_UNAVAILABLE);
+        }
+
+        // 解析 HH:mm 时间字符串
+        java.time.LocalTime startLocalTime = java.time.LocalTime.parse(req.getStartTime());
+        java.time.LocalTime endLocalTime   = java.time.LocalTime.parse(req.getEndTime());
+        if (!endLocalTime.isAfter(startLocalTime)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST);
+        }
+        long durationMinutes = java.time.Duration.between(startLocalTime, endLocalTime).toMinutes();
+        if (durationMinutes > 240) {
+            throw new BusinessException(ResultCode.RESERVATION_OUT_OF_RANGE);
+        }
+
+        LocalDate date = LocalDate.parse(req.getDate());
+        LocalDateTime reqStart = date.atTime(startLocalTime);
+        LocalDateTime reqEnd   = date.atTime(endLocalTime);
+
+        // 用 startAt/endAt 做精确冲突检测，支持半小时粒度
+        List<Reservation> conflicts = bookingMapper.selectList(
+                new LambdaQueryWrapper<Reservation>()
+                        .eq(Reservation::getSeatId, req.getSeatId())
+                        .eq(Reservation::getReservationDate, date)
+                        .notIn(Reservation::getReservationStatus, "cancelled")
+        );
+        for (Reservation existing : conflicts) {
+            LocalDateTime exStart = existing.getStartAt();
+            LocalDateTime exEnd   = existing.getEndAt();
+            if (exStart == null || exEnd == null) continue;
+            if (reqStart.isBefore(exEnd) && reqEnd.isAfter(exStart)) {
+                throw new BusinessException(ResultCode.RESERVATION_TIME_CONFLICT);
+            }
+        }
+
+        Reservation r = new Reservation();
+        r.setReservationNo("RSV" + System.currentTimeMillis());
+        r.setUserId(userId);
+        r.setCreatedByUserId(userId);
+        r.setStudyRoomId(seat.getStudyRoomId());
+        r.setSeatId(req.getSeatId());
+        r.setReservationDate(date);
+        r.setStartAt(reqStart);
+        r.setEndAt(reqEnd);
+        r.setReservationStatus("pending_checkin");
+        r.setSourceChannel("web");
+        r.setNotesText(String.format("%04d", new Random().nextInt(10000)));
+        r.setCheckinDeadlineAt(reqEnd);  // 整个时段内均可签到，结束后未签到才算违约
+        bookingMapper.insert(r);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", r.getId());
+        result.put("roomName", roomMapper.selectById(seat.getStudyRoomId()).getRoomName());
+        result.put("seatCode", seat.getSeatCode());
+        result.put("status", r.getReservationStatus());
+        result.put("checkinCode", r.getNotesText());
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> checkinByCode(Long userId, String code) {
+        if (code == null || code.isBlank()) {
+            throw new BusinessException(ResultCode.CHECKIN_CODE_INVALID);
+        }
+        // 按签到码查找该用户待签到的预约
+        Reservation r = bookingMapper.selectOne(
+                new LambdaQueryWrapper<Reservation>()
+                        .eq(Reservation::getUserId, userId)
+                        .eq(Reservation::getNotesText, code.trim())
+                        .eq(Reservation::getReservationStatus, "pending_checkin")
+        );
+        if (r == null) {
+            throw new BusinessException(ResultCode.CHECKIN_CODE_INVALID);
+        }
+        // 校验签到时间窗口：开始前15分钟 ~ 预约结束时间
+        LocalDateTime now        = DateUtil.now();
+        LocalDateTime windowOpen = r.getStartAt().minusMinutes(15);
+        LocalDateTime deadline   = r.getCheckinDeadlineAt() != null
+                ? r.getCheckinDeadlineAt()
+                : r.getEndAt();
+        if (now.isBefore(windowOpen)) {
+            throw new BusinessException(ResultCode.CHECKIN_TOO_EARLY);
+        }
+        if (now.isAfter(deadline)) {
+            throw new BusinessException(ResultCode.CHECKIN_NOT_IN_TIME);
+        }
+        r.setReservationStatus("checked_in");
+        r.setCheckedInAt(DateUtil.now());
+        bookingMapper.updateById(r);
+
+        StudyRoom room = roomMapper.selectById(r.getStudyRoomId());
+        Seat seat      = seatMapper.selectById(r.getSeatId());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id",       r.getId());
+        result.put("roomName", room != null ? room.getRoomName() : null);
+        result.put("seatCode", seat != null ? seat.getSeatCode() : null);
+        result.put("date",     r.getReservationDate() != null ? r.getReservationDate().toString() : null);
+        String startTime = r.getStartAt() != null ? r.getStartAt().toLocalTime().toString().substring(0, 5) : null;
+        String endTime   = r.getEndAt()   != null ? r.getEndAt().toLocalTime().toString().substring(0, 5)   : null;
+        result.put("startTime", startTime);
+        result.put("endTime",   endTime);
+        result.put("status",    r.getReservationStatus());
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public void cancelReservation(Long userId, Long reservationId) {
+        Reservation r = bookingMapper.selectById(reservationId);
+        if (r == null || !r.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.RESERVATION_NOT_FOUND);
+        }
+        if ("cancelled".equals(r.getReservationStatus())) {
+            throw new BusinessException(ResultCode.RESOURCE_CONFLICT, "预约已取消");
+        }
+        r.setReservationStatus("cancelled");
+        r.setCancelledAt(LocalDateTime.now());
+        bookingMapper.updateById(r);
+    }
+}

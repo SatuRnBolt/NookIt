@@ -21,6 +21,7 @@ public class User extends BaseEntity {
     private String employeeNo;
     private String fullName;
     private String nickname;
+    private String signature;
     private String email;
     private String phone;
     private String avatarUrl;
