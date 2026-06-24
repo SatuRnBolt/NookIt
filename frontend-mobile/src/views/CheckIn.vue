@@ -149,7 +149,7 @@ function reset() {
 }
 
 async function handleCheckin() {
-  if (code.value.length < 6 || loading.value) return
+  if (code.value.length < 4 || loading.value) return
   loading.value = true
   try {
     const data = await checkinByCode(code.value)
@@ -178,9 +178,9 @@ async function handleCheckin() {
 
 <style scoped>
 .checkin-page {
-  min-height: 100vh;
+  min-height: 100%;
   background: var(--nt-bg);
-  padding-bottom: 80px;
+  padding-bottom: 20px;
 }
 
 .checkin-hero {
