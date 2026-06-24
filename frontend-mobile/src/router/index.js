@@ -29,13 +29,12 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-  // TODO: restore auth check before release
-  // const auth = useAuthStore()
-  // await auth.checkAuth()
-  // if (!to.meta.public && !auth.isLoggedIn) {
-  //   next('/login')
-  //   return
-  // }
+  const auth = useAuthStore()
+  await auth.checkAuth()
+  if (!to.meta.public && !auth.isLoggedIn) {
+    next('/login')
+    return
+  }
   next()
 })
 
