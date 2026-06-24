@@ -201,6 +201,13 @@ import { getRoomDetail, getSeatMap } from '../api/rooms'
 import { createReservation } from '../api/reservations'
 import defaultBg from '../assets/classroom_background.png'
 
+function toLocalDateStr(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 const router = useRouter()
 const route = useRoute()
 
@@ -361,7 +368,7 @@ const canSubmit = computed(() =>
 )
 
 function onDateConfirm(date) {
-  selectedDate.value = date.toISOString().split('T')[0]
+  selectedDate.value = toLocalDateStr(date)
   showCal.value = false
 }
 
@@ -396,7 +403,7 @@ async function handleSubmit() {
 // ── Lifecycle ──
 onMounted(async () => {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = toLocalDateStr()
     const [roomData, mapData] = await Promise.all([
       getRoomDetail(route.params.id),
       getSeatMap(route.params.id, today).catch(() => null),

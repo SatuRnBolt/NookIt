@@ -12,6 +12,7 @@ import com.nookit.modules.admin.booking.mapper.BookingMapper;
 import com.nookit.modules.admin.room.mapper.RoomMapper;
 import com.nookit.modules.admin.room.mapper.SeatMapper;
 import com.nookit.modules.student.reservation.dto.CreateReservationReq;
+import com.nookit.common.util.DateUtil;
 import com.nookit.modules.student.reservation.service.StudentReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -190,7 +191,7 @@ public class StudentReservationServiceImpl implements StudentReservationService 
             throw new BusinessException(ResultCode.CHECKIN_CODE_INVALID);
         }
         // 校验签到时间窗口：开始前15分钟 ~ 预约结束时间
-        LocalDateTime now        = LocalDateTime.now();
+        LocalDateTime now        = DateUtil.now();
         LocalDateTime windowOpen = r.getStartAt().minusMinutes(15);
         LocalDateTime deadline   = r.getCheckinDeadlineAt() != null
                 ? r.getCheckinDeadlineAt()
@@ -202,7 +203,7 @@ public class StudentReservationServiceImpl implements StudentReservationService 
             throw new BusinessException(ResultCode.CHECKIN_NOT_IN_TIME);
         }
         r.setReservationStatus("checked_in");
-        r.setCheckedInAt(now);
+        r.setCheckedInAt(DateUtil.now());
         bookingMapper.updateById(r);
 
         StudyRoom room = roomMapper.selectById(r.getStudyRoomId());

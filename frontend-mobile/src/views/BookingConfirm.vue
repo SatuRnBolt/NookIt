@@ -91,6 +91,13 @@ import { showSuccessToast } from 'vant'
 import { createReservation } from '../api/reservations'
 import { getSeatSlots } from '../api/rooms'
 
+function toLocalDateStr(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 const router = useRouter()
 const route = useRoute()
 
@@ -110,7 +117,7 @@ const canSubmit = computed(() =>
 )
 
 function onDateConfirm(date) {
-  selectedDate.value = date.toISOString().split('T')[0]
+  selectedDate.value = toLocalDateStr(date)
   showDatePicker.value = false
   startSlot.value = null
   endSlot.value = null
